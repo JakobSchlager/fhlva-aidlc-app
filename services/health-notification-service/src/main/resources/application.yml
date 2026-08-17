@@ -1,0 +1,61 @@
+server:
+  port: 8083
+
+spring:
+  application:
+    name: health-notification-service
+
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/beertracker}
+    username: ${DB_USERNAME:beertracker}
+    password: ${DB_PASSWORD:beertracker}
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: false
+    open-in-view: false
+
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          jwk-set-uri: ${JWKS_URI}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: always
+  health:
+    livenessstate:
+      enabled: true
+    readinessstate:
+      enabled: true
+
+app:
+  notification:
+    thresholdDailyDrinks: ${THRESHOLD_DAILY_DRINKS:2}
+    thresholdWeeklyDrinks: ${THRESHOLD_WEEKLY_DRINKS:14}
+  scheduler:
+    evaluationDelayMs: ${SCHEDULER_EVALUATION_DELAY_MS:300000}
+  tracking:
+    internalUrl: ${BEER_TRACKING_INTERNAL_URL:http://beer-tracking-service:8082}
+    internalApiKey: ${INTERNAL_API_KEY:}
+
+logging:
+  config: classpath:logback-spring.xml

@@ -1,0 +1,8 @@
+# Azure AKS deployment values.
+# ACR images, Key Vault name, tenant ID, and workload identity client IDs
+# are supplied at deploy time via --set flags in scripts/deploy-azure.sh.
+
+ingress:
+  class: azure/application-gateway
+  tls:
+    enabled: true

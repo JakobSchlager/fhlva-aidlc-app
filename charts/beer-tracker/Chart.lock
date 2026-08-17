@@ -1,0 +1,18 @@
+dependencies:
+- name: auth-service
+  repository: file://../auth-service
+  version: 0.1.0
+- name: beer-tracking-service
+  repository: file://../beer-tracking-service
+  version: 0.1.0
+- name: health-notification-service
+  repository: file://../health-notification-service
+  version: 0.1.0
+- name: statistics-service
+  repository: file://../statistics-service
+  version: 0.1.0
+- name: frontend
+  repository: file://../frontend
+  version: 0.1.0
+digest: sha256:f4012536dbc634a060df0a6f851d7d3241011d083b7ee533b65c8ec013cee9f6
+generated: "2026-08-03T10:04:31.194387964+02:00"

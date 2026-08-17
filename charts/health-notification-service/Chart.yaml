@@ -1,0 +1,5 @@
+apiVersion: v2
+name: health-notification-service
+description: Health notification service for the beer consumption tracker
+version: 0.1.0
+appVersion: "1.0.0"

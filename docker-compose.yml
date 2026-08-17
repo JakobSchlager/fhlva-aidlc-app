@@ -1,0 +1,143 @@
+version: "3.9"
+
+networks:
+  beer-tracker-network:
+    driver: bridge
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_USER: postgres
+    volumes:
+      - ./postgres-init/init.sql:/docker-entrypoint-initdb.d/init.sql
+      - postgres-data:/var/lib/postgresql/data
+    networks:
+      - beer-tracker-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  auth-service:
+    build: ./services/auth-service
+    restart: unless-stopped
+    ports:
+      - "8081:8081"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/auth_db
+      SPRING_DATASOURCE_USERNAME: postgres
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
+      AUTH_PRIVATE_KEY_PATH: /run/secrets/auth-private-key
+      INTERNAL_API_KEY: ${INTERNAL_API_KEY}
+    volumes:
+      - ./secrets/auth-rs256-private-key.pem:/run/secrets/auth-private-key:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - beer-tracker-network
+
+  beer-tracking-service:
+    build: ./services/beer-tracking-service
+    restart: unless-stopped
+    ports:
+      - "8082:8082"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/tracking_db
+      SPRING_DATASOURCE_USERNAME: postgres
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
+      INTERNAL_API_KEY: ${INTERNAL_API_KEY}
+      JWKS_URI: http://auth-service:8081/auth/.well-known/jwks.json
+    depends_on:
+      postgres:
+        condition: service_healthy
+      auth-service:
+        condition: service_started
+    networks:
+      - beer-tracker-network
+
+  health-notification-service:
+    build: ./services/health-notification-service
+    restart: unless-stopped
+    ports:
+      - "8083:8083"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/notifications_db
+      SPRING_DATASOURCE_USERNAME: postgres
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
+      INTERNAL_API_KEY: ${INTERNAL_API_KEY}
+      JWKS_URI: http://auth-service:8081/auth/.well-known/jwks.json
+      THRESHOLD_DAILY_DRINKS: "2"
+      THRESHOLD_WEEKLY_DRINKS: "14"
+      BEER_TRACKING_INTERNAL_URL: http://beer-tracking-service:8082
+      SCHEDULER_EVALUATION_DELAY_MS: "5000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      auth-service:
+        condition: service_started
+      beer-tracking-service:
+        condition: service_started
+    networks:
+      - beer-tracker-network
+
+  statistics-service:
+    build: ./services/statistics-service
+    restart: unless-stopped
+    ports:
+      - "8084:8084"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/statistics_db
+      SPRING_DATASOURCE_USERNAME: postgres
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
+      INTERNAL_API_KEY: ${INTERNAL_API_KEY}
+      JWKS_URI: http://auth-service:8081/auth/.well-known/jwks.json
+      BEER_TRACKING_INTERNAL_URL: http://beer-tracking-service:8082
+    depends_on:
+      postgres:
+        condition: service_healthy
+      auth-service:
+        condition: service_started
+      beer-tracking-service:
+        condition: service_started
+    networks:
+      - beer-tracker-network
+
+  frontend:
+    build: ./frontend
+    restart: unless-stopped
+    environment:
+      VITE_API_BASE_URL: http://localhost
+    depends_on:
+      auth-service:
+        condition: service_started
+    networks:
+      - beer-tracker-network
+
+  nginx:
+    image: nginx:alpine
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      auth-service:
+        condition: service_started
+      beer-tracking-service:
+        condition: service_started
+      health-notification-service:
+        condition: service_started
+      statistics-service:
+        condition: service_started
+      frontend:
+        condition: service_started
+    networks:
+      - beer-tracker-network
+
+volumes:
+  postgres-data:

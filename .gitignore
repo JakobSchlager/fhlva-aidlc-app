@@ -1,0 +1,98 @@
+# ─── Java / Maven ───────────────────────────────────────────────────────────
+target/
+*.class
+*.jar
+*.war
+*.ear
+*.nar
+*.zip
+*.tar.gz
+*.rar
+hs_err_pid*
+replay_pid*
+
+# Maven wrapper jar (keep the wrapper scripts, ignore the binary)
+.mvn/wrapper/maven-wrapper.jar
+
+# ─── Node / Frontend ─────────────────────────────────────────────────────────
+node_modules/
+dist/
+.output/
+.nuxt/
+.next/
+out/
+build/
+*.local
+
+# Environment variable files
+.env
+.env.*
+!.env.example
+
+# ─── IDE / Editor ────────────────────────────────────────────────────────────
+# IntelliJ IDEA
+.idea/
+*.iml
+*.iws
+*.ipr
+out/
+.idea_modules/
+
+# VS Code
+.vscode/
+*.code-workspace
+
+# Eclipse
+.project
+.classpath
+.settings/
+.factorypath
+
+# NetBeans
+nbproject/
+nbbuild/
+nbdist/
+.nb-gradle/
+
+# ─── Secrets ─────────────────────────────────────────────────────────────────
+secrets/*.pem
+secrets/*.key
+secrets/*.p12
+secrets/*.jks
+# Keep the README so new developers know what to put here
+!secrets/README.md
+
+# ─── Docker volumes / local data ─────────────────────────────────────────────
+postgres-data/
+docker-volumes/
+
+# ─── OS files ────────────────────────────────────────────────────────────────
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Linux
+*~
+.Trash-*
+
+# ─── Logs ────────────────────────────────────────────────────────────────────
+*.log
+logs/
+spring.log
+
+# ─── Test / coverage reports ─────────────────────────────────────────────────
+/coverage/
+.nyc_output/
+surefire-reports/
+charts/beer-tracker/charts/
+e2e/test-results/
+e2e/playwright-report/data/
+test-results/

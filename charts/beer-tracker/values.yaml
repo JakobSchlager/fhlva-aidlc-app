@@ -1,0 +1,115 @@
+global:
+  image:
+    registry: ""
+    tag: "latest"
+  keyVault:
+    name: ""
+    tenantId: ""
+
+ingress:
+  class: "azure/application-gateway"
+  tls:
+    enabled: true
+
+# Per-service value overrides.
+# Each key matches the sub-chart name; values are merged with that chart's defaults.
+
+auth-service:
+  image:
+    repository: ""
+    tag: "latest"
+    pullPolicy: IfNotPresent
+  replicaCount: 1
+  autoscaling:
+    enabled: false
+    minReplicas: 1
+    maxReplicas: 5
+    targetCPUUtilizationPercentage: 60
+  serviceAccount:
+    name: auth-service
+  keyVault:
+    name: ""
+    tenantId: ""
+  workloadIdentity:
+    clientId: ""
+  env: {}
+
+beer-tracking-service:
+  image:
+    repository: ""
+    tag: "latest"
+    pullPolicy: IfNotPresent
+  replicaCount: 1
+  autoscaling:
+    enabled: false
+    minReplicas: 1
+    maxReplicas: 5
+    targetCPUUtilizationPercentage: 60
+  serviceAccount:
+    name: beer-tracking-service
+  keyVault:
+    name: ""
+    tenantId: ""
+  workloadIdentity:
+    clientId: ""
+  env: {}
+
+health-notification-service:
+  image:
+    repository: ""
+    tag: "latest"
+    pullPolicy: IfNotPresent
+  replicaCount: 1
+  autoscaling:
+    enabled: false
+    minReplicas: 1
+    maxReplicas: 5
+    targetCPUUtilizationPercentage: 60
+  serviceAccount:
+    name: health-notification-service
+  keyVault:
+    name: ""
+    tenantId: ""
+  workloadIdentity:
+    clientId: ""
+  env: {}
+
+statistics-service:
+  image:
+    repository: ""
+    tag: "latest"
+    pullPolicy: IfNotPresent
+  replicaCount: 1
+  autoscaling:
+    enabled: false
+    minReplicas: 1
+    maxReplicas: 5
+    targetCPUUtilizationPercentage: 60
+  serviceAccount:
+    name: statistics-service
+  keyVault:
+    name: ""
+    tenantId: ""
+  workloadIdentity:
+    clientId: ""
+  env: {}
+
+frontend:
+  image:
+    repository: ""
+    tag: "latest"
+    pullPolicy: IfNotPresent
+  replicaCount: 1
+  autoscaling:
+    enabled: false
+    minReplicas: 1
+    maxReplicas: 5
+    targetCPUUtilizationPercentage: 60
+  serviceAccount:
+    name: frontend
+  keyVault:
+    name: ""
+    tenantId: ""
+  workloadIdentity:
+    clientId: ""
+  env: {}
