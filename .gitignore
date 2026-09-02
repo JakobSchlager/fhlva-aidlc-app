@@ -96,3 +96,19 @@ charts/beer-tracker/charts/
 e2e/test-results/
 e2e/playwright-report/data/
 test-results/
+
+# ─── Terraform ───────────────────────────────────────────────────────────────
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+crash.log
+crash.*.log
+
+# Secret tfvars — never commit; inject via TF_VAR_* in CI/CD
+infra/terraform/*.auto.tfvars
+infra/terraform/secrets.tfvars
+
+# Keep non-secret environment var files tracked
+!infra/terraform/dev.tfvars
+!infra/terraform/staging.tfvars

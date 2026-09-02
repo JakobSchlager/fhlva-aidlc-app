@@ -14,18 +14,8 @@ spec:
     metadata:
       labels:
         app: {{ .Chart.Name }}
-        azure.workload.identity/use: "true"
     spec:
       serviceAccountName: {{ .Values.serviceAccount.name }}
-      {{- if eq .Values.secretsProvider "azure" }}
-      volumes:
-        - name: secrets-store
-          csi:
-            driver: secrets-store.csi.k8s.io
-            readOnly: true
-            volumeAttributes:
-              secretProviderClass: {{ printf "%s-%s-secret-provider" .Release.Name .Chart.Name }}
-      {{- end }}
       containers:
         - name: {{ .Chart.Name }}
           image: {{ printf "%s:%s" .Values.image.repository .Values.image.tag }}
@@ -33,30 +23,18 @@ spec:
           ports:
             - containerPort: {{ .Values.service.port }}
               protocol: TCP
-          {{- if eq .Values.secretsProvider "azure" }}
-          volumeMounts:
-            - name: secrets-store
-              mountPath: /mnt/secrets-store
-              readOnly: true
-          {{- end }}
           envFrom:
             - configMapRef:
                 name: {{ printf "%s-%s-config" .Release.Name .Chart.Name }}
+            - secretRef:
+                name: beer-tracker-secrets
+          {{- if .Values.env }}
           env:
-            - name: SPRING_DATASOURCE_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: {{ printf "%s-%s-secrets" .Release.Name .Chart.Name }}
-                  key: notifications-db-password
-            - name: INTERNAL_API_KEY
-              valueFrom:
-                secretKeyRef:
-                  name: {{ printf "%s-%s-secrets" .Release.Name .Chart.Name }}
-                  key: internal-api-key
             {{- range $key, $value := .Values.env }}
             - name: {{ $key }}
               value: {{ $value | quote }}
             {{- end }}
+          {{- end }}
           livenessProbe:
             httpGet:
               path: /actuator/health/liveness

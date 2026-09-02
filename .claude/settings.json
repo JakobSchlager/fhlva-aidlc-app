@@ -1,0 +1,6 @@
+{
+  "enabledPlugins": {
+    "terraform@claude-plugins-official": true,
+    "aws-core@claude-plugins-official": true
+  }
+}

@@ -38,8 +38,8 @@ A single PostgreSQL 16 instance (compose) or a Bitnami PostgreSQL chart / Azure 
 | Scenario | Key delivery mechanism |
 |---|---|
 | Compose | `secrets/auth-rs256-private-key.pem` bind-mounted read-only into the container |
-| minikube | `deploy-minikube.sh` reads `.env` → `kubectl create secret generic` → pod consumes via `secretKeyRef` |
-| Azure AKS | `deploy-azure.sh` uploads key to Azure Key Vault → CSI driver mounts it into the pod |
+| minikube | `deploy-minikube.sh` reads `.env` → `kubectl create secret generic` → pod consumes via `envFrom` |
+| Azure AKS | `deploy-azure.sh` reads `AUTH_RSA_KEY_PATH` → `kubectl create secret generic beer-tracker-secrets` → pod consumes via `envFrom` |
 
 ---
 
@@ -217,82 +217,148 @@ Stop the forward with `Ctrl-C`.
 
 ## Scenario 3 — Azure AKS
 
-Production-grade deployment on Azure Kubernetes Service. Uses Azure Container Registry for images, Azure PostgreSQL Flexible Server for data, Azure Key Vault for secrets, and Azure Application Gateway as the ingress.
+Production-grade deployment on Azure Kubernetes Service. Uses Azure Container Registry for images, a Kubernetes Secret for application secrets, and Azure Application Gateway as the ingress.
 
-Infrastructure is defined in `infra/main.bicep` (and supporting modules: `acr.bicep`, `aks.bicep`, `keyvault.bicep`, `monitoring.bicep`, `network.bicep`, `postgres.bicep`). CI/CD runs via `.github/workflows/ci.yml`.
+Infrastructure is defined in `infra/terraform/` via two reusable modules (`network`, `aks`) and per-environment stage roots under `infra/terraform/stages/`. Each stage is self-contained — `terraform init` and `terraform apply` require no flags or environment variables. See [infra/terraform/README.md](infra/terraform/README.md) for full details.
+
+Application secrets are stored in a Kubernetes Secret (`beer-tracker-secrets`) in the `beer-tracker` namespace. The secret must exist before the first Helm deploy — see step 6 below.
 
 ### Prerequisites
 
-- **Azure CLI (`az`) ≥ 2.50** and an active subscription
+- **Terraform ≥ 1.9**
+- **Azure CLI (`az`) ≥ 2.60** and an active subscription with Contributor access
 - **Docker** (for building and pushing images to ACR)
 - **kubectl**
 - **helm ≥ 3.10**
-- **jq**
+- `openssl` available on `$PATH`
 
 ### Setup
 
-1. Create a service principal for deployment:
+#### Phase 1 — Provision infrastructure with Terraform
+
+1. Generate the RSA private key if you have not already:
 
    ```bash
-   az ad sp create-for-rbac --name beer-tracker-sp --sdk-auth
+   openssl genrsa -out secrets/auth-rs256-private-key.pem 2048
    ```
 
-   Save the JSON output — you will need it for GitHub Actions secrets.
-
-2. Set required environment variables:
+2. Create the resource group and Log Analytics workspace. Terraform reads these but does not create them:
 
    ```bash
-   export AZURE_RESOURCE_GROUP=rg-beer-tracker
-   export AZURE_LOCATION=eastus
-   export POSTGRES_ADMIN_PASSWORD=<strong-password>
+   az group create \
+     --name fhooe-aidlc-dev-rg \
+     --location germanywestcentral
+
+   az monitor log-analytics workspace create \
+     --resource-group fhooe-aidlc-dev-rg \
+     --workspace-name fhooe-aidlc-dev-law \
+     --location germanywestcentral
+   ```
+
+3. Bootstrap the remote state storage account (one-time):
+
+   ```bash
+   scripts/bootstrap-tf-state.sh \
+     --resource-group  fhooe-aidlc-tfstate-rg \
+     --storage-account <globally-unique-name> \
+     --container       tfstate \
+     --location        germanywestcentral
+   ```
+
+4. Fill in the two placeholder values in the stage files before first init:
+   - `infra/terraform/stages/dev/main.tf` → set `subscription_id` to the dev subscription ID
+   - `infra/terraform/stages/dev/backend.tf` → set `storage_account_name` to the name chosen in step 3
+
+5. Initialise and apply Terraform (no flags or environment variables required):
+
+   ```bash
+   cd infra/terraform/stages/dev
+   terraform init
+   terraform plan -out=tfplan
+   terraform apply tfplan
+   ```
+
+   For staging, use `infra/terraform/stages/staging/` and fill in the staging-specific values first.
+
+6. Populate `beer-tracker-secrets` (one-time before first Helm deploy, or on rotation):
+
+   ```bash
+   # Interactive — prompts for each secret value with hidden input
+   scripts/set-k8s-secrets.sh --environment dev
+
+   # Non-interactive — set env vars first
+   export SECRET_AUTH_RS256_PRIVATE_KEY="$(cat secrets/auth-rs256-private-key.pem)"
+   export SECRET_AUTH_DB_PASSWORD="<password>"
+   export SECRET_TRACKING_DB_PASSWORD="<password>"
+   export SECRET_NOTIFICATIONS_DB_PASSWORD="<password>"
+   export SECRET_STATISTICS_DB_PASSWORD="<password>"
+   export SECRET_INTERNAL_API_KEY="<random-secret>"
+   scripts/set-k8s-secrets.sh --environment dev
+   ```
+
+   The script gets AKS credentials and creates or updates the `beer-tracker-secrets` Kubernetes Secret in the `beer-tracker` namespace. It is idempotent — safe to re-run.
+
+7. Capture the Terraform outputs and configure `kubectl` (run from inside `stages/dev/`):
+
+   ```bash
+   AKS_CLUSTER_NAME=$(terraform output -raw aks_cluster_name)
+
+   az aks get-credentials \
+     --resource-group fhooe-aidlc-dev-rg \
+     --name "$AKS_CLUSTER_NAME" \
+     --overwrite-existing
+   ```
+
+#### Phase 2 — Build, push, and deploy the application
+
+> ACR is not yet managed by the Terraform modules. Provision it separately before this phase, then set `local.acr_id` in the stage's `main.tf` and re-run `terraform apply` to grant the AKS kubelet identity `AcrPull` access automatically.
+
+8. Set the variables needed by the deployment:
+
+   ```bash
+   export ACR_LOGIN_SERVER=<your-acr>.azurecr.io
+   export AZURE_RESOURCE_GROUP=fhooe-aidlc-dev-rg
+   export INTERNAL_API_KEY=<same value used for TF_VAR_internal_api_key>
+   export AUTH_RSA_KEY_PATH=secrets/auth-rs256-private-key.pem
+
+   # Postgres passwords must match TF_VAR_*_db_password values used above
+   export POSTGRES_ADMIN_PASSWORD=<admin-password>
    export POSTGRES_APP_PASSWORD=<app-password>
-   export INTERNAL_API_KEY=<random-secret>
-   export AUTH_RSA_KEY_PATH=./secrets/auth-rs256-private-key.pem
+   export AZURE_LOCATION=germanywestcentral
    ```
 
-   Ensure the RSA key exists at `AUTH_RSA_KEY_PATH` (see `secrets/README.md`).
-
-3. Run the deployment script:
+9. Build images, push to ACR, and deploy the Helm chart:
 
    ```bash
-   ./scripts/deploy-azure.sh
+   cd ../..
+   GIT_SHA=$(git rev-parse --short HEAD)
+   az acr login --name "${ACR_LOGIN_SERVER%%.*}"
+
+   for svc in auth-service beer-tracking-service health-notification-service statistics-service; do
+     docker build -t "$ACR_LOGIN_SERVER/$svc:$GIT_SHA" "services/$svc"
+     docker push "$ACR_LOGIN_SERVER/$svc:$GIT_SHA"
+   done
+   docker build -t "$ACR_LOGIN_SERVER/frontend:$GIT_SHA" frontend
+   docker push "$ACR_LOGIN_SERVER/frontend:$GIT_SHA"
+
+   helm dependency update charts/beer-tracker
+   helm upgrade --install beer-tracker charts/beer-tracker \
+     --namespace beer-tracker --create-namespace \
+     -f values-azure.yaml \
+     --set "auth-service.image.repository=$ACR_LOGIN_SERVER/auth-service" \
+     --set "auth-service.image.tag=$GIT_SHA" \
+     --set "beer-tracking-service.image.repository=$ACR_LOGIN_SERVER/beer-tracking-service" \
+     --set "beer-tracking-service.image.tag=$GIT_SHA" \
+     --set "health-notification-service.image.repository=$ACR_LOGIN_SERVER/health-notification-service" \
+     --set "health-notification-service.image.tag=$GIT_SHA" \
+     --set "statistics-service.image.repository=$ACR_LOGIN_SERVER/statistics-service" \
+     --set "statistics-service.image.tag=$GIT_SHA" \
+     --set "frontend.image.repository=$ACR_LOGIN_SERVER/frontend" \
+     --set "frontend.image.tag=$GIT_SHA" \
+     --wait --timeout=10m
    ```
 
-   The script provisions infrastructure via Bicep, builds and pushes images to ACR, uploads the RSA key and other secrets to Key Vault, then deploys the Helm chart with `values-azure.yaml`.
-
-4. One-time database schema initialisation — connect to the PostgreSQL Flexible Server and run the init script:
-
-   ```bash
-   psql "host=<flexible-server-fqdn> dbname=postgres user=psqladmin sslmode=require" \
-     -f postgres-init/init.sql
-   ```
-
-   The FQDN is printed by `deploy-azure.sh` or retrievable via:
-
-   ```bash
-   az postgres flexible-server show \
-     -g $AZURE_RESOURCE_GROUP -n beer-tracker-postgres \
-     --query fullyQualifiedDomainName -o tsv
-   ```
-
-5. Grant the GitHub Actions service principal AKS RBAC access:
-
-   ```bash
-   AKS_ID=$(az aks show -g $AZURE_RESOURCE_GROUP -n $AKS_CLUSTER_NAME --query id -o tsv)
-   az role assignment create --assignee <SP_OBJECT_ID> \
-     --role "Azure Kubernetes Service RBAC Cluster Admin" --scope $AKS_ID
-   ```
-
-6. Set the following GitHub Actions repository secrets:
-
-   | Secret | Value |
-   |---|---|
-   | `AZURE_CREDENTIALS` | JSON output from `az ad sp create-for-rbac` |
-   | `ACR_LOGIN_SERVER` | e.g. `beertracker.azurecr.io` |
-   | `AKS_CLUSTER_NAME` | Name of the AKS cluster |
-   | `AZURE_RESOURCE_GROUP` | Resource group name |
-   | `KEY_VAULT_NAME` | Name of the Azure Key Vault |
-   | `AZURE_TENANT_ID` | Azure tenant ID |
+   > **Note:** `beer-tracker-secrets` must exist before `helm upgrade --install` runs. If this is a first deploy on a fresh cluster, run step 6 first.
 
 ### Verification
 
@@ -307,11 +373,11 @@ Note the `ADDRESS` on the ingress — that is the Application Gateway public IP.
 
 | Symptom | Resolution |
 |---|---|
-| CSI driver volume mount fails | Confirm the pod's managed identity has `Key Vault Secrets User` role on the Key Vault. Check `kubectl describe pod` for the CSI error message. |
-| `Forbidden` when accessing Key Vault | The Key Vault access policy or RBAC role assignment may be missing. Run `az keyvault show` to verify RBAC mode, then check role assignments. |
-| Bicep deployment errors | Run `az deployment group show` to see the error detail. Common causes: quota limits, naming collisions, missing provider registrations. |
+| Pods stuck in `CreateContainerConfigError` | `beer-tracker-secrets` is missing or in the wrong namespace. Run `scripts/set-k8s-secrets.sh --environment <env>` and redeploy. |
+| `terraform apply` errors | Common causes: quota limits, naming collisions, missing provider registrations. Run `terraform plan` again after fixing to confirm the error is resolved. |
+| State lock not released | If a previous apply was interrupted, remove the lock with `az storage blob lease break` on the state blob or `terraform force-unlock <lock-id>`. |
 | Application Gateway returns 502 | Backend health probe failing. Check pod readiness (`kubectl get pods`) and ensure `initialDelaySeconds` is long enough for Spring Boot startup (~30 s). |
-| ACR push denied | Re-login: `az acr login --name <acr-name>`. Confirm the SP has `AcrPush` role. |
+| ACR push denied | Re-login: `az acr login --name <acr-name>`. Confirm the identity has `AcrPush` role on the registry. |
 
 ---
 

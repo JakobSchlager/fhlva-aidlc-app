@@ -1,6 +1,7 @@
 # Azure AKS deployment values.
-# ACR images, Key Vault name, tenant ID, and workload identity client IDs
-# are supplied at deploy time via --set flags in scripts/deploy-azure.sh.
+# ACR images are supplied at deploy time via --set flags in scripts/deploy-azure.sh.
+# Application secrets are delivered via the beer-tracker-secrets Kubernetes Secret,
+# created by scripts/deploy-azure.sh (automated) or scripts/set-k8s-secrets.sh (manual).
 
 ingress:
   class: azure/application-gateway

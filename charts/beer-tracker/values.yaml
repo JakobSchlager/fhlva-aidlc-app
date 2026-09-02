@@ -2,9 +2,6 @@ global:
   image:
     registry: ""
     tag: "latest"
-  keyVault:
-    name: ""
-    tenantId: ""
 
 ingress:
   class: "azure/application-gateway"
@@ -27,11 +24,6 @@ auth-service:
     targetCPUUtilizationPercentage: 60
   serviceAccount:
     name: auth-service
-  keyVault:
-    name: ""
-    tenantId: ""
-  workloadIdentity:
-    clientId: ""
   env: {}
 
 beer-tracking-service:
@@ -47,11 +39,6 @@ beer-tracking-service:
     targetCPUUtilizationPercentage: 60
   serviceAccount:
     name: beer-tracking-service
-  keyVault:
-    name: ""
-    tenantId: ""
-  workloadIdentity:
-    clientId: ""
   env: {}
 
 health-notification-service:
@@ -67,11 +54,6 @@ health-notification-service:
     targetCPUUtilizationPercentage: 60
   serviceAccount:
     name: health-notification-service
-  keyVault:
-    name: ""
-    tenantId: ""
-  workloadIdentity:
-    clientId: ""
   env: {}
 
 statistics-service:
@@ -87,11 +69,6 @@ statistics-service:
     targetCPUUtilizationPercentage: 60
   serviceAccount:
     name: statistics-service
-  keyVault:
-    name: ""
-    tenantId: ""
-  workloadIdentity:
-    clientId: ""
   env: {}
 
 frontend:
@@ -107,9 +84,4 @@ frontend:
     targetCPUUtilizationPercentage: 60
   serviceAccount:
     name: frontend
-  keyVault:
-    name: ""
-    tenantId: ""
-  workloadIdentity:
-    clientId: ""
   env: {}

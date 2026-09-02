@@ -47,7 +47,7 @@
 
 ## 7. Validation
 
-- [ ] 7.1 Run `podman compose up -d` (or `docker compose up -d`) and verify all containers reach healthy state
-- [ ] 7.2 Run `scripts/deploy-minikube.sh` against a clean minikube instance and verify all pods reach `Running`
+- [x] 7.1 Run `podman compose up -d` (or `docker compose up -d`) and verify all containers reach healthy state
+- [x] 7.2 Run `scripts/deploy-minikube.sh` against a clean minikube instance and verify all pods reach `Running`
 - [x] 7.3 Run `helm template beer-tracker ./charts/beer-tracker -f values-azure.yaml` and verify CSI volume and `SecretProviderClass` are present in the output
 - [x] 7.4 Commit `.github/workflows/ci.yml` and `infra/` (currently untracked) alongside all new files in a single commit

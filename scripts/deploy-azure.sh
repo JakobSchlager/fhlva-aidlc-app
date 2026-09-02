@@ -66,32 +66,17 @@ DEPLOY_OUTPUT=$(az deployment group create \
   --parameters "$BICEP_PARAMS" \
   --parameters postgresAdminPassword="$POSTGRES_ADMIN_PASSWORD" \
   --parameters postgresAppPassword="$POSTGRES_APP_PASSWORD" \
-  --parameters internalApiKey="$INTERNAL_API_KEY" \
-  --parameters authRsaPrivateKey="$(cat "$AUTH_RSA_KEY_PATH")" \
   --query "properties.outputs" \
   --output json)
 
 # --- Capture Bicep outputs ---------------------------------------------------
 ACR_LOGIN_SERVER=$(echo "$DEPLOY_OUTPUT" | jq -r '.acrLoginServer.value')
 AKS_CLUSTER_NAME=$(echo "$DEPLOY_OUTPUT" | jq -r '.aksClusterName.value')
-KEY_VAULT_NAME=$(echo "$DEPLOY_OUTPUT" | jq -r '.keyVaultName.value')
-TENANT_ID=$(echo "$DEPLOY_OUTPUT" | jq -r '.tenantId.value // empty')
 POSTGRES_FQDN=$(echo "$DEPLOY_OUTPUT" | jq -r '.postgresFqdn.value')
-
-# Per-service workload identity client IDs
-AUTH_CLIENT_ID=$(echo "$DEPLOY_OUTPUT" | jq -r '.serviceIdentityClientIds.value["auth-service"]')
-TRACKING_CLIENT_ID=$(echo "$DEPLOY_OUTPUT" | jq -r '.serviceIdentityClientIds.value["beer-tracking-service"]')
-NOTIFICATIONS_CLIENT_ID=$(echo "$DEPLOY_OUTPUT" | jq -r '.serviceIdentityClientIds.value["health-notification-service"]')
-STATISTICS_CLIENT_ID=$(echo "$DEPLOY_OUTPUT" | jq -r '.serviceIdentityClientIds.value["statistics-service"]')
-
-if [[ -z "$TENANT_ID" ]]; then
-  TENANT_ID=$(az account show --query tenantId -o tsv)
-fi
 
 echo "Bicep outputs:"
 echo "  ACR: $ACR_LOGIN_SERVER"
 echo "  AKS: $AKS_CLUSTER_NAME"
-echo "  Key Vault: $KEY_VAULT_NAME"
 echo "  PostgreSQL: $POSTGRES_FQDN"
 
 # --- Grant GitHub Actions SP access to AKS (if GH_SP_OBJECT_ID is set) ------
@@ -137,6 +122,19 @@ az aks get-credentials \
   --name "$AKS_CLUSTER_NAME" \
   --overwrite-existing
 
+# --- Create beer-tracker-secrets Kubernetes Secret (idempotent) --------------
+echo "Creating beer-tracker-secrets Kubernetes Secret..."
+kubectl create namespace "$NAMESPACE" --dry-run=client -o yaml | kubectl apply -f -
+kubectl create secret generic beer-tracker-secrets \
+  --namespace="$NAMESPACE" \
+  --from-literal=auth-rs256-private-key="$(cat "$AUTH_RSA_KEY_PATH")" \
+  --from-literal=auth-db-password="$POSTGRES_APP_PASSWORD" \
+  --from-literal=tracking-db-password="$POSTGRES_APP_PASSWORD" \
+  --from-literal=notifications-db-password="$POSTGRES_APP_PASSWORD" \
+  --from-literal=statistics-db-password="$POSTGRES_APP_PASSWORD" \
+  --from-literal=internal-api-key="$INTERNAL_API_KEY" \
+  --dry-run=client -o yaml | kubectl apply -f -
+
 # --- Helm dependency update --------------------------------------------------
 echo "Updating Helm dependencies..."
 helm dependency update "$CHART"
@@ -149,24 +147,12 @@ helm upgrade --install "$RELEASE" "$CHART" \
   -f "$REPO_ROOT/values-azure.yaml" \
   --set "auth-service.image.repository=$ACR_LOGIN_SERVER/auth-service" \
   --set "auth-service.image.tag=$GIT_SHA" \
-  --set "auth-service.keyVault.name=$KEY_VAULT_NAME" \
-  --set "auth-service.keyVault.tenantId=$TENANT_ID" \
-  --set "auth-service.workloadIdentity.clientId=$AUTH_CLIENT_ID" \
   --set "beer-tracking-service.image.repository=$ACR_LOGIN_SERVER/beer-tracking-service" \
   --set "beer-tracking-service.image.tag=$GIT_SHA" \
-  --set "beer-tracking-service.keyVault.name=$KEY_VAULT_NAME" \
-  --set "beer-tracking-service.keyVault.tenantId=$TENANT_ID" \
-  --set "beer-tracking-service.workloadIdentity.clientId=$TRACKING_CLIENT_ID" \
   --set "health-notification-service.image.repository=$ACR_LOGIN_SERVER/health-notification-service" \
   --set "health-notification-service.image.tag=$GIT_SHA" \
-  --set "health-notification-service.keyVault.name=$KEY_VAULT_NAME" \
-  --set "health-notification-service.keyVault.tenantId=$TENANT_ID" \
-  --set "health-notification-service.workloadIdentity.clientId=$NOTIFICATIONS_CLIENT_ID" \
   --set "statistics-service.image.repository=$ACR_LOGIN_SERVER/statistics-service" \
   --set "statistics-service.image.tag=$GIT_SHA" \
-  --set "statistics-service.keyVault.name=$KEY_VAULT_NAME" \
-  --set "statistics-service.keyVault.tenantId=$TENANT_ID" \
-  --set "statistics-service.workloadIdentity.clientId=$STATISTICS_CLIENT_ID" \
   --set "frontend.image.repository=$ACR_LOGIN_SERVER/frontend" \
   --set "frontend.image.tag=$GIT_SHA" \
   --wait --timeout=10m
@@ -181,10 +167,3 @@ echo ""
 echo "2. Initialise the PostgreSQL schema (first deploy only):"
 echo "   psql \"host=$POSTGRES_FQDN port=5432 dbname=postgres user=appuser sslmode=require\" \\"
 echo "     -f postgres-init/init.sql"
-echo ""
-echo "3. Set GitHub Actions secrets (see README Azure section for details):"
-echo "   AZURE_CREDENTIALS, ACR_LOGIN_SERVER=$ACR_LOGIN_SERVER"
-echo "   AKS_CLUSTER_NAME=$AKS_CLUSTER_NAME"
-echo "   AZURE_RESOURCE_GROUP=$AZURE_RESOURCE_GROUP"
-echo "   KEY_VAULT_NAME=$KEY_VAULT_NAME"
-echo "   AZURE_TENANT_ID=$TENANT_ID"
