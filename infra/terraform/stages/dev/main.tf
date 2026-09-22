@@ -15,8 +15,6 @@ locals {
 
   alert_email_address = "platform@example.com"
 
-  acr_id = "" # set to ACR resource ID once ACR module is added
-
   tags = {
     project     = local.project_name
     environment = local.environment
@@ -58,16 +56,36 @@ module "aks" {
   api_server_authorized_ips  = local.api_server_authorized_ips
 }
 
+module "acr" {
+  source = "../../modules/acr"
+
+  project_name        = local.project_name
+  environment         = local.environment
+  location            = local.location
+  resource_group_name = data.azurerm_resource_group.main.name
+  tags                = local.tags
+}
+
 resource "azurerm_role_assignment" "agic_appgw_contributor" {
   scope                = module.network.app_gw_id
   role_definition_name = "Contributor"
   principal_id         = module.aks.agic_identity_object_id
 }
 
-resource "azurerm_role_assignment" "kubelet_acr_pull" {
-  for_each = local.acr_id != "" ? toset([local.acr_id]) : toset([])
+resource "azurerm_role_assignment" "agic_vnet_network_contributor" {
+  scope                = module.network.vnet_id
+  role_definition_name = "Network Contributor"
+  principal_id         = module.aks.agic_identity_object_id
+}
 
-  scope                = each.value
+resource "azurerm_role_assignment" "agic_rg_reader" {
+  scope                = data.azurerm_resource_group.main.id
+  role_definition_name = "Reader"
+  principal_id         = module.aks.agic_identity_object_id
+}
+
+resource "azurerm_role_assignment" "kubelet_acr_pull" {
+  scope                = module.acr.acr_id
   role_definition_name = "AcrPull"
   principal_id         = module.aks.kubelet_identity_object_id
 }

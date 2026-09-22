@@ -221,13 +221,59 @@ Production-grade deployment on Azure Kubernetes Service. Uses Azure Container Re
 
 Infrastructure is defined in `infra/terraform/` via two reusable modules (`network`, `aks`) and per-environment stage roots under `infra/terraform/stages/`. Each stage is self-contained — `terraform init` and `terraform apply` require no flags or environment variables. See [infra/terraform/README.md](infra/terraform/README.md) for full details.
 
-Application secrets are stored in a Kubernetes Secret (`beer-tracker-secrets`) in the `beer-tracker` namespace. The secret must exist before the first Helm deploy — see step 6 below.
+Application secrets are stored in a Kubernetes Secret (`beer-tracker-secrets`) in the `beer-tracker` namespace. `deploy-azure.sh` creates or updates this secret automatically on every run.
+
+### Authentication
+
+All commands in this scenario require an active Azure CLI session.
+
+**Log in** (opens a browser):
+
+```bash
+az login
+```
+
+**Verify the correct subscription is active:**
+
+```bash
+az account show --query "{name:name, id:id}" -o table
+```
+
+If a different subscription is shown, switch before running anything else:
+
+```bash
+az account set --subscription <subscription-id-or-name>
+```
+
+**Required permissions:** The signed-in identity needs **Owner**, or **Contributor + User Access Administrator**, on the subscription. Contributor alone is not sufficient — the Terraform configuration creates role assignments (AGIC roles, ACR pull for the kubelet identity) that require `Microsoft.Authorization/roleAssignments/write`.
+
+**Terraform** authenticates via the active Azure CLI session automatically. No service principal or environment variables are needed for local use.
+
+**CI/CD service principal (optional):** To let GitHub Actions deploy, create a service principal and store its credentials as the `AZURE_CREDENTIALS` secret:
+
+```bash
+# Create the SP with Owner role (needed to create role assignments)
+az ad sp create-for-rbac \
+  --name "github-actions-beer-tracker" \
+  --role Owner \
+  --scopes /subscriptions/$(az account show --query id -o tsv) \
+  --sdk-auth
+```
+
+Copy the full JSON output to the `AZURE_CREDENTIALS` GitHub Actions secret. To grant the SP access to the AKS cluster on first deploy, set `GH_SP_OBJECT_ID` when running `deploy-azure.sh`:
+
+```bash
+export GH_SP_OBJECT_ID=$(az ad sp show --id <app-id-from-above> --query id -o tsv)
+./scripts/deploy-azure.sh
+```
+
+The script grants the SP the `Azure Kubernetes Service RBAC Cluster Admin` role on the cluster. Subsequent CI/CD runs do not need `GH_SP_OBJECT_ID` set.
 
 ### Prerequisites
 
 - **Terraform ≥ 1.9**
-- **Azure CLI (`az`) ≥ 2.60** and an active subscription with Contributor access
-- **Docker** (for building and pushing images to ACR)
+- **Azure CLI (`az`) ≥ 2.60** logged in with Owner or Contributor + User Access Administrator on the subscription
+- **Docker or Podman** (for building and pushing images to ACR; the deploy script uses `--expose-token` and is compatible with both)
 - **kubectl**
 - **helm ≥ 3.10**
 - `openssl` available on `$PATH`
@@ -278,29 +324,35 @@ Application secrets are stored in a Kubernetes Secret (`beer-tracker-secrets`) i
    terraform apply tfplan
    ```
 
-   For staging, use `infra/terraform/stages/staging/` and fill in the staging-specific values first.
-
-6. Populate `beer-tracker-secrets` (one-time before first Helm deploy, or on rotation):
+5a. Grant operator identities the `Azure Kubernetes Service RBAC Cluster Admin` role on the newly created cluster (repeat for each operator or CI/CD service principal):
 
    ```bash
-   # Interactive — prompts for each secret value with hidden input
-   scripts/set-k8s-secrets.sh --environment dev
+   AKS_ID=$(az aks show \
+     --resource-group fhooe-aidlc-dev-rg \
+     --name "$(terraform output -raw aks_cluster_name)" \
+     --query id -o tsv)
 
-   # Non-interactive — set env vars first
-   export SECRET_AUTH_RS256_PRIVATE_KEY="$(cat secrets/auth-rs256-private-key.pem)"
-   export SECRET_AUTH_DB_PASSWORD="<password>"
-   export SECRET_TRACKING_DB_PASSWORD="<password>"
-   export SECRET_NOTIFICATIONS_DB_PASSWORD="<password>"
-   export SECRET_STATISTICS_DB_PASSWORD="<password>"
-   export SECRET_INTERNAL_API_KEY="<random-secret>"
-   scripts/set-k8s-secrets.sh --environment dev
+   az role assignment create \
+     --assignee <user-email-or-sp-object-id> \
+     --role "Azure Kubernetes Service RBAC Cluster Admin" \
+     --scope "$AKS_ID"
    ```
 
-   The script gets AKS credentials and creates or updates the `beer-tracker-secrets` Kubernetes Secret in the `beer-tracker` namespace. It is idempotent — safe to re-run.
+   This is required because the cluster uses Entra ID + Azure RBAC with local accounts disabled. Without this role, `kubectl` commands fail with a Forbidden error even after `az aks get-credentials`.
 
-7. Capture the Terraform outputs and configure `kubectl` (run from inside `stages/dev/`):
+   After granting the role, refresh your kubeconfig to get a token that reflects the new assignment:
 
    ```bash
+   az aks get-credentials \
+     --resource-group fhooe-aidlc-dev-rg \
+     --name "$(terraform output -raw aks_cluster_name)" \
+     --overwrite-existing
+   ```
+
+6. Verify `kubectl` is configured (optional — `deploy-azure.sh` does this automatically):
+
+   ```bash
+   cd infra/terraform/stages/dev
    AKS_CLUSTER_NAME=$(terraform output -raw aks_cluster_name)
 
    az aks get-credentials \
@@ -309,56 +361,40 @@ Application secrets are stored in a Kubernetes Secret (`beer-tracker-secrets`) i
      --overwrite-existing
    ```
 
+   Skip this step if you are proceeding directly to Phase 2; the deployment script configures credentials as part of its run.
+
 #### Phase 2 — Build, push, and deploy the application
 
-> ACR is not yet managed by the Terraform modules. Provision it separately before this phase, then set `local.acr_id` in the stage's `main.tf` and re-run `terraform apply` to grant the AKS kubelet identity `AcrPull` access automatically.
+7. Set the four environment variables required by the deployment script:
 
-8. Set the variables needed by the deployment:
+   Generate secure random values for the password and API key if you do not have them already:
 
    ```bash
-   export ACR_LOGIN_SERVER=<your-acr>.azurecr.io
+   # PostgreSQL password (32 random alphanumeric characters)
+   openssl rand -base64 24 | tr -dc 'A-Za-z0-9' | head -c 32
+
+   # Internal API key (64 random hex characters)
+   openssl rand -hex 32
+   ```
+
+   Then export them:
+
+   ```bash
    export AZURE_RESOURCE_GROUP=fhooe-aidlc-dev-rg
-   export INTERNAL_API_KEY=<same value used for TF_VAR_internal_api_key>
+   export POSTGRES_APP_PASSWORD=<output of first command>
+   export INTERNAL_API_KEY=<output of second command>
    export AUTH_RSA_KEY_PATH=secrets/auth-rs256-private-key.pem
-
-   # Postgres passwords must match TF_VAR_*_db_password values used above
-   export POSTGRES_ADMIN_PASSWORD=<admin-password>
-   export POSTGRES_APP_PASSWORD=<app-password>
-   export AZURE_LOCATION=germanywestcentral
    ```
 
-9. Build images, push to ACR, and deploy the Helm chart:
+8. Run the deployment script from the repo root:
 
    ```bash
-   cd ../..
-   GIT_SHA=$(git rev-parse --short HEAD)
-   az acr login --name "${ACR_LOGIN_SERVER%%.*}"
-
-   for svc in auth-service beer-tracking-service health-notification-service statistics-service; do
-     docker build -t "$ACR_LOGIN_SERVER/$svc:$GIT_SHA" "services/$svc"
-     docker push "$ACR_LOGIN_SERVER/$svc:$GIT_SHA"
-   done
-   docker build -t "$ACR_LOGIN_SERVER/frontend:$GIT_SHA" frontend
-   docker push "$ACR_LOGIN_SERVER/frontend:$GIT_SHA"
-
-   helm dependency update charts/beer-tracker
-   helm upgrade --install beer-tracker charts/beer-tracker \
-     --namespace beer-tracker --create-namespace \
-     -f values-azure.yaml \
-     --set "auth-service.image.repository=$ACR_LOGIN_SERVER/auth-service" \
-     --set "auth-service.image.tag=$GIT_SHA" \
-     --set "beer-tracking-service.image.repository=$ACR_LOGIN_SERVER/beer-tracking-service" \
-     --set "beer-tracking-service.image.tag=$GIT_SHA" \
-     --set "health-notification-service.image.repository=$ACR_LOGIN_SERVER/health-notification-service" \
-     --set "health-notification-service.image.tag=$GIT_SHA" \
-     --set "statistics-service.image.repository=$ACR_LOGIN_SERVER/statistics-service" \
-     --set "statistics-service.image.tag=$GIT_SHA" \
-     --set "frontend.image.repository=$ACR_LOGIN_SERVER/frontend" \
-     --set "frontend.image.tag=$GIT_SHA" \
-     --wait --timeout=10m
+   ./scripts/deploy-azure.sh
    ```
 
-   > **Note:** `beer-tracker-secrets` must exist before `helm upgrade --install` runs. If this is a first deploy on a fresh cluster, run step 6 first.
+   The script reads ACR login server and AKS cluster name from `terraform output`, logs in to ACR using `--expose-token` (compatible with both Docker and Podman), installs Bitnami PostgreSQL in-cluster, initialises the four databases, creates or updates `beer-tracker-secrets`, builds and pushes all five images tagged at the current git SHA, and deploys the Helm chart.
+
+   > **Secret rotation:** To update secrets without a full redeploy, use `scripts/set-k8s-secrets.sh --environment dev` and then `kubectl rollout restart deployment -n beer-tracker`.
 
 ### Verification
 

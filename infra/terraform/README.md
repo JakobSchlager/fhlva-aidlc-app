@@ -6,24 +6,23 @@ Terraform infrastructure for the Beer Tracker application: networking (VNet + Ap
 
 - [Terraform](https://developer.hashicorp.com/terraform/install) >= 1.9
 - [Azure CLI](https://learn.microsoft.com/en-us/cli/azure/install-azure-cli) >= 2.60
-- An Azure subscription (dev and staging use separate subscriptions)
+- An Azure subscription
 - A Log Analytics workspace already provisioned (name: `fhooe-aidlc-<env>-law`)
 - A resource group already provisioned (name: `fhooe-aidlc-<env>-rg`)
 
 ## One-time setup
 
-### 1. Fill in subscription IDs
+### 1. Fill in the subscription ID
 
-Edit the `locals` block in each stage's `main.tf` and replace the placeholder subscription IDs:
+Edit the `locals` block in `stages/dev/main.tf` and replace the placeholder subscription ID:
 
 ```
-infra/terraform/stages/dev/main.tf      → subscription_id = "FILL_IN_DEV_SUBSCRIPTION_ID"
-infra/terraform/stages/staging/main.tf  → subscription_id = "FILL_IN_STAGING_SUBSCRIPTION_ID"
+infra/terraform/stages/dev/main.tf  →  subscription_id = "FILL_IN_DEV_SUBSCRIPTION_ID"
 ```
 
 ### 2. Create the remote state storage account
 
-Both stages share a single storage account. Run this once before the first `terraform init`:
+Run this once before the first `terraform init`:
 
 ```bash
 scripts/bootstrap-tf-state.sh \
@@ -34,11 +33,10 @@ scripts/bootstrap-tf-state.sh \
 
 ### 3. Fill in the storage account name
 
-Edit `backend.tf` in each stage and replace `FILL_IN_STORAGE_ACCOUNT` with the name chosen above:
+Edit `backend.tf` and replace `FILL_IN_STORAGE_ACCOUNT` with the name chosen above:
 
 ```
 infra/terraform/stages/dev/backend.tf
-infra/terraform/stages/staging/backend.tf
 ```
 
 ## Deploying an environment
@@ -81,8 +79,6 @@ scripts/set-keyvault-secrets.sh --environment dev
 
 The script is idempotent — re-running it updates the values. Subsequent `terraform apply` runs do not overwrite secrets (enforced by `lifecycle { ignore_changes = [value] }`).
 
-For staging, substitute `--environment staging` and `cd infra/terraform/stages/staging`.
-
 ## Module structure
 
 ```
@@ -90,17 +86,17 @@ infra/terraform/
 ├── modules/
 │   ├── network/      # VNet, subnets, Application Gateway, NSG
 │   ├── aks/          # AKS cluster with AGIC, Container Insights, Workload Identity
-│   └── keyvault/     # Key Vault, per-service UAMIs, federated credentials, secret slots
+│   ├── keyvault/     # Key Vault, per-service UAMIs, federated credentials, secret slots
+│   └── acr/          # Azure Container Registry (Standard SKU); kubelet identity granted AcrPull in each stage
 └── stages/
-    ├── dev/          # Dev environment root (backend.tf, providers.tf, main.tf, outputs.tf)
-    └── staging/      # Staging environment root (same shape, staging-specific values)
+    └── dev/          # Dev environment root (backend.tf, providers.tf, main.tf, outputs.tf)
 ```
 
-Each stage is a self-contained Terraform root. Running `terraform` commands inside a stage targets only that environment.
+The stage is a self-contained Terraform root. Running `terraform` commands inside `stages/dev/` targets only that environment.
 
 ## Rollback
 
-During the migration phase the Bicep stack in the original resource group is untouched. To roll back, delete the Terraform-managed resource group:
+To tear down all Terraform-managed resources, delete the resource group:
 
 ```bash
 az group delete --name fhooe-aidlc-dev-rg --yes --no-wait

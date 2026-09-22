@@ -16,6 +16,13 @@ spec:
         app: {{ .Chart.Name }}
     spec:
       serviceAccountName: {{ .Values.serviceAccount.name }}
+      volumes:
+        - name: auth-private-key
+          secret:
+            secretName: beer-tracker-secrets
+            items:
+              - key: auth-rs256-private-key
+                path: auth-rs256-private-key
       containers:
         - name: {{ .Chart.Name }}
           image: {{ printf "%s:%s" .Values.image.repository .Values.image.tag }}
@@ -35,6 +42,10 @@ spec:
               value: {{ $value | quote }}
             {{- end }}
           {{- end }}
+          volumeMounts:
+            - name: auth-private-key
+              mountPath: /etc/secrets
+              readOnly: true
           livenessProbe:
             httpGet:
               path: /actuator/health/liveness

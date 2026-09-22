@@ -12,3 +12,8 @@ output "ingress_public_ip" {
   description = "Public IP address of the Application Gateway ingress."
   value       = module.network.app_gw_public_ip
 }
+
+output "acr_login_server" {
+  description = "Login server FQDN of the Azure Container Registry."
+  value       = module.acr.acr_login_server
+}

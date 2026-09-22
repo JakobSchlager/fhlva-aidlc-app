@@ -7,7 +7,7 @@
 #   - kubectl installed on PATH
 #
 # Usage:
-#   scripts/set-k8s-secrets.sh --environment <dev|staging>
+#   scripts/set-k8s-secrets.sh --environment dev
 #
 # The script gets AKS credentials, then prompts for each secret value
 # interactively (input is hidden). To use in a non-interactive pipeline,
@@ -20,10 +20,6 @@
 #   export SECRET_STATISTICS_DB_PASSWORD="..."
 #   export SECRET_INTERNAL_API_KEY="..."
 #   scripts/set-k8s-secrets.sh --environment dev
-#
-# Examples:
-#   scripts/set-k8s-secrets.sh --environment dev
-#   scripts/set-k8s-secrets.sh --environment staging
 set -euo pipefail
 
 # ── Argument parsing ───────────────────────────────────────────────────────────
@@ -31,10 +27,10 @@ ENVIRONMENT=""
 
 usage() {
   cat <<EOF
-Usage: $0 --environment <dev|staging>
+Usage: $0 --environment dev
 
 Options:
-  -e, --environment  Target environment (required: dev or staging)
+  -e, --environment  Target environment (required: dev)
   -h, --help         Show this help message
 EOF
 }
@@ -54,9 +50,9 @@ if [[ -z "$ENVIRONMENT" ]]; then
 fi
 
 case "$ENVIRONMENT" in
-  dev|staging) ;;
+  dev) ;;
   *)
-    echo "Error: unknown environment '$ENVIRONMENT' (must be dev or staging)"
+    echo "Error: unknown environment '$ENVIRONMENT' (must be dev)"
     usage
     exit 1
     ;;

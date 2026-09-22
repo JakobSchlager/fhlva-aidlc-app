@@ -8,7 +8,7 @@ metadata:
     app.kubernetes.io/managed-by: Helm
   annotations:
     kubernetes.io/ingress.class: {{ .Values.ingress.class | quote }}
-    {{- if eq .Values.ingress.class "azure/application-gateway" }}
+    {{- if and (eq .Values.ingress.class "azure/application-gateway") .Values.ingress.tls.enabled }}
     appgw.ingress.kubernetes.io/ssl-redirect: "true"
     {{- end }}
 spec:
