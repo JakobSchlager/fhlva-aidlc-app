@@ -15,6 +15,61 @@ A microservices application for tracking beer consumption with health threshold 
 
 ## Architecture
 
+```mermaid
+graph TD
+    Browser(["Browser / User"])
+
+    nginx["nginx · :8080\n────────────\nblocks /internal/*"]
+
+    frontend["frontend\nReact SPA"]
+
+    subgraph auth_svc["auth-service · :8081"]
+        auth["JWT issuance\nJWKS endpoint"]
+    end
+
+    subgraph tracking_svc["beer-tracking-service · :8082"]
+        tracking["Consumption event log\nInternal summary API"]
+    end
+
+    subgraph notif_svc["health-notification-service · :8083"]
+        notifications["Threshold evaluation API"]
+        eval_sched[["ConsumptionEvaluationScheduler\nfixed delay · default 5 min"]]
+    end
+
+    subgraph stats_svc["statistics-service · :8084"]
+        statistics["Statistics cache API"]
+        stats_sched[["StatsCacheRefreshScheduler\nfixed rate · default 15 min"]]
+    end
+
+    subgraph pg["PostgreSQL 16"]
+        auth_db[(auth_db)]
+        tracking_db[(tracking_db)]
+        notif_db[(notifications_db)]
+        stats_db[(statistics_db)]
+    end
+
+    Browser -->|"HTTP :8080"| nginx
+    nginx -->|"/"| frontend
+    nginx -->|"/auth"| auth
+    nginx -->|"/tracking"| tracking
+    nginx -->|"/notifications"| notifications
+    nginx -->|"/statistics"| statistics
+
+    tracking -->|"JWKS fetch"| auth
+    notifications -->|"JWKS fetch"| auth
+    statistics -->|"JWKS fetch"| auth
+
+    eval_sched -->|"X-Internal-Key\n/internal/tracking/users\n/internal/tracking/summary"| tracking
+    stats_sched -->|"X-Internal-Key\n/internal/tracking/..."| tracking
+
+    auth --- auth_db
+    tracking --- tracking_db
+    notifications --- notif_db
+    statistics --- stats_db
+```
+
+> **Scheduled jobs** (double-bar boxes) run as in-process Spring `@Scheduled` tasks inside their service — not as separate containers. `ConsumptionEvaluationScheduler` polls tracking data and evaluates daily/weekly thresholds; `StatsCacheRefreshScheduler` refreshes the aggregated statistics cache. The nginx ingress returns `403` on any `/internal/*` path, so these internal routes are unreachable from the browser.
+
 ### Services
 
 | Service | Port | Description | Database |
