@@ -94,7 +94,7 @@ spring.log
 surefire-reports/
 charts/beer-tracker/charts/
 e2e/test-results/
-e2e/playwright-report/data/
+e2e/playwright-report/
 test-results/
 
 # ─── Terraform ───────────────────────────────────────────────────────────────
