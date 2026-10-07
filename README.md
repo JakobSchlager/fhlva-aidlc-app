@@ -6,6 +6,7 @@ A microservices application for tracking beer consumption with health threshold 
 
 - [Architecture](#architecture)
 - [Configuration Reference](#configuration-reference)
+- [Development container](#development-container)
 - [Scenario 1 — Podman Compose / Docker Compose](#scenario-1--podman-compose--docker-compose)
 - [Scenario 2 — minikube](#scenario-2--minikube)
 - [Scenario 3 — Azure AKS](#scenario-3--azure-aks)
@@ -112,6 +113,12 @@ A single PostgreSQL 16 instance (compose) or a Bitnami PostgreSQL chart / Azure 
 | `VITE_API_BASE_URL` | `frontend` (build-time) | Base URL the browser uses to reach the API |
 
 Copy `.env.example` to `.env` and fill in values before running any scenario. See `secrets/README.md` for key generation instructions.
+
+---
+
+## Development container
+
+A [development container](.devcontainer/README.md) with the full toolchain (JDK, Maven, Node, Podman Compose, minikube, Terraform, Azure CLI) lets you run the scenarios below without installing those tools yourself. It needs a **rootful** Podman engine on the host and two VS Code settings; read the [guide](.devcontainer/README.md) before opening it. It is tested on Windows 11 with Podman Desktop; native Linux and macOS are not yet tested.
 
 ---
 

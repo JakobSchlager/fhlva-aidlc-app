@@ -112,3 +112,4 @@ infra/terraform/secrets.tfvars
 # Keep non-secret environment var files tracked
 !infra/terraform/dev.tfvars
 !infra/terraform/staging.tfvars
+infra/terraform/stages/dev/tfplan

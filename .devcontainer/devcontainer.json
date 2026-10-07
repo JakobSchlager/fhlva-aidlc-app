@@ -1,0 +1,51 @@
+// Devcontainer for fhlva-aidlc-app on Podman. Design: openspec/changes/archive/2026-10-07-add-podman-devcontainer.
+// Host prerequisites (rootful Podman, VS Code user settings) are in the host-setup guide.
+// Note: application-scope settings such as dev.containers.mountWaylandSocket cannot be set here.
+{
+  "name": "fhlva-aidlc-app (Podman)",
+  "build": { "dockerfile": "Dockerfile", "context": "." },
+
+  // Podman runs inside this container, so it must be privileged and run as root.
+  "privileged": true,
+  "containerUser": "root",
+  "remoteUser": "root",
+
+  // Headless Chromium crashes when /dev/shm is too small: Podman's default is 64 MB, and with it 15 of 19
+  // e2e tests failed ("Target page, context or browser has been closed"); with 1 GB they passed (design D9).
+  "runArgs": ["--shm-size=1g"],
+
+  "mounts": [
+    // Nested Podman's image and container storage.
+    "source=${devcontainerId}-containers,target=/var/lib/containers,type=volume",
+    "source=${devcontainerId}-m2,target=/root/.m2,type=volume",
+    "source=${devcontainerId}-azure,target=/root/.azure,type=volume",
+    "source=${devcontainerId}-kube,target=/root/.kube,type=volume",
+    "source=${devcontainerId}-minikube,target=/root/.minikube,type=volume",
+    // Keep node_modules off the (possibly slow) workspace mount.
+    "source=${devcontainerId}-frontend-node-modules,target=${containerWorkspaceFolder}/frontend/node_modules,type=volume",
+    "source=${devcontainerId}-e2e-node-modules,target=${containerWorkspaceFolder}/e2e/node_modules,type=volume"
+  ],
+
+  "forwardPorts": [8080, 8081, 8082, 8083, 8084, 5173],
+
+  "postCreateCommand": "bash .devcontainer/scripts/post-create.sh",
+  // Runs on every start. The extension replaces the entrypoint, so cgroup setup cannot be PID 1 (design D2).
+  // Then start the health-check runner: without systemd nothing else executes Podman health checks,
+  // and compose's depends_on service_healthy would wait forever (design D11).
+  "postStartCommand": "devcontainer-cgroup-init && devcontainer-healthcheck-runner start",
+
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "vscjava.vscode-java-pack",
+        "dbaeumer.vscode-eslint",
+        "ms-kubernetes-tools.vscode-kubernetes-tools",
+        // Checked 2026-10-07 on Windows: these IDs install in the container and appear in `code --list-extensions`.
+        "bradlc.vscode-tailwindcss",
+        "hashicorp.terraform",
+        "ms-playwright.playwright"
+        // Helm: no dedicated extension chosen. The Kubernetes extension above is installed; whether it covers Helm charts was not checked.
+      ]
+    }
+  }
+}
