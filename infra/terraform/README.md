@@ -1,6 +1,6 @@
 # Beer Tracker — Terraform Infrastructure
 
-Terraform infrastructure for the Beer Tracker application: networking (VNet + Application Gateway), AKS cluster, and Key Vault with per-service managed identities.
+Terraform infrastructure for the Beer Tracker application: networking (VNet + Application Gateway), an AKS cluster, and an Azure Container Registry.
 
 ## Prerequisites
 
@@ -59,25 +59,9 @@ terraform apply tfplan
 
 No environment variables required.
 
-### Set secret values (after first apply)
+### Application secrets
 
-Terraform creates Key Vault secret slots with a placeholder value. Run the bootstrap script to set real values:
-
-```bash
-# Interactive — prompts for each secret
-scripts/set-keyvault-secrets.sh --environment dev
-
-# Non-interactive (CI/CD pipeline)
-export SECRET_AUTH_RS256_PRIVATE_KEY="$(cat secrets/auth.pem)"
-export SECRET_AUTH_DB_PASSWORD="..."
-export SECRET_TRACKING_DB_PASSWORD="..."
-export SECRET_NOTIFICATIONS_DB_PASSWORD="..."
-export SECRET_STATISTICS_DB_PASSWORD="..."
-export SECRET_INTERNAL_API_KEY="..."
-scripts/set-keyvault-secrets.sh --environment dev
-```
-
-The script is idempotent — re-running it updates the values. Subsequent `terraform apply` runs do not overwrite secrets (enforced by `lifecycle { ignore_changes = [value] }`).
+Terraform does not manage application secrets. They live in the Kubernetes Secret `beer-tracker-secrets` (keys `auth-rs256-private-key`, `SPRING_DATASOURCE_PASSWORD` and `INTERNAL_API_KEY`), which `scripts/deploy-azure.sh` creates or updates on every deploy. To change the values without a full redeploy, run `scripts/set-k8s-secrets.sh --environment dev` (its header lists the non-interactive `SECRET_*` variables) and then `kubectl rollout restart deployment -n beer-tracker`. See the Azure AKS scenario in the main `README.md`.
 
 ## Module structure
 
@@ -85,8 +69,7 @@ The script is idempotent — re-running it updates the values. Subsequent `terra
 infra/terraform/
 ├── modules/
 │   ├── network/      # VNet, subnets, Application Gateway, NSG
-│   ├── aks/          # AKS cluster with AGIC, Container Insights, Workload Identity
-│   ├── keyvault/     # Key Vault, per-service UAMIs, federated credentials, secret slots
+│   ├── aks/          # AKS cluster with AGIC, Container Insights; OIDC issuer, Workload Identity and Secrets Store CSI are enabled but currently unused
 │   └── acr/          # Azure Container Registry (Standard SKU); kubelet identity granted AcrPull in each stage
 └── stages/
     └── dev/          # Dev environment root (backend.tf, providers.tf, main.tf, outputs.tf)

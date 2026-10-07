@@ -1,6 +1,6 @@
 ## Purpose
 
-Specifies how the `beer-tracker-secrets` Kubernetes Secret is created, populated, and consumed. Covers both the manual operator path (`scripts/set-k8s-secrets.sh`) and the automated deploy-script path (`deploy-azure.sh`). Replaces `keyvault-secret-bootstrap`.
+Specifies how the `beer-tracker-secrets` Kubernetes Secret is created, populated, and consumed. Covers both the manual operator path (`scripts/set-k8s-secrets.sh`) and the automated deploy-script path (`deploy-azure.sh`). Replaces the retired Key Vault bootstrap (see the archived change `2026-09-02-k8s-native-secrets`).
 
 ## Requirements
 

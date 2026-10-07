@@ -28,11 +28,11 @@ The dev stage `main.tf` SHALL define a `locals` block containing at minimum: `su
 - **THEN** a `locals` block SHALL exist with the dev-specific subscription ID and environment name `"dev"`
 
 ### Requirement: Dev stage calls all root modules
-The dev stage `main.tf` SHALL call the `network`, `aks`, `keyvault`, and `acr` modules using relative paths (`../../modules/<name>`), passing values from `local.*` rather than `var.*`. The `acr` module SHALL receive `resource_group_name` from `data.azurerm_resource_group.main.name`. The `kubelet_acr_pull` role assignment SHALL reference `module.acr.acr_id` as its scope; the empty `acr_id = ""` local placeholder SHALL be removed.
+The dev stage `main.tf` SHALL call the `network`, `aks`, and `acr` modules using relative paths (`../../modules/<name>`), passing values from `local.*` rather than `var.*`. The `acr` module SHALL receive `resource_group_name` from `data.azurerm_resource_group.main.name`. The `kubelet_acr_pull` role assignment SHALL reference `module.acr.acr_id` as its scope; the empty `acr_id = ""` local placeholder SHALL be removed.
 
 #### Scenario: Module sources use relative paths
 - **WHEN** the dev stage `main.tf` is read
-- **THEN** each module block (`network`, `aks`, `keyvault`, `acr`) SHALL have `source = "../../modules/<name>"` and all required inputs SHALL reference `local.*` values
+- **THEN** each module block (`network`, `aks`, `acr`) SHALL have `source = "../../modules/<name>"` and all required inputs SHALL reference `local.*` values
 
 #### Scenario: Kubelet identity gets AcrPull on the ACR
 - **WHEN** the dev stage is applied
