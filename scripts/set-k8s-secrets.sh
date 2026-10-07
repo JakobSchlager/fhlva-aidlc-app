@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 # Populate the beer-tracker-secrets Kubernetes Secret.
 #
+# The Secret holds three keys, matching scripts/deploy-azure.sh:
+#   auth-rs256-private-key      (mounted as a file by auth-service)
+#   SPRING_DATASOURCE_PASSWORD  (single DB password shared by all services)
+#   INTERNAL_API_KEY
+#
 # Prerequisites:
 #   - Azure CLI logged in (az login) with access to the target subscription
 #   - AKS cluster provisioned for the target environment
@@ -14,10 +19,7 @@
 # set the corresponding env vars before running:
 #
 #   export SECRET_AUTH_RS256_PRIVATE_KEY="$(cat secrets/auth-rs256-private-key.pem)"
-#   export SECRET_AUTH_DB_PASSWORD="..."
-#   export SECRET_TRACKING_DB_PASSWORD="..."
-#   export SECRET_NOTIFICATIONS_DB_PASSWORD="..."
-#   export SECRET_STATISTICS_DB_PASSWORD="..."
+#   export SECRET_DB_PASSWORD="..."
 #   export SECRET_INTERNAL_API_KEY="..."
 #   scripts/set-k8s-secrets.sh --environment dev
 set -euo pipefail
@@ -100,11 +102,8 @@ echo "Enter secret values (input is hidden). Press Ctrl+C to abort."
 echo ""
 
 AUTH_RS256_PRIVATE_KEY=$(read_secret "auth-rs256-private-key"    "SECRET_AUTH_RS256_PRIVATE_KEY")
-AUTH_DB_PASSWORD=$(read_secret        "auth-db-password"          "SECRET_AUTH_DB_PASSWORD")
-TRACKING_DB_PASSWORD=$(read_secret    "tracking-db-password"      "SECRET_TRACKING_DB_PASSWORD")
-NOTIF_DB_PASSWORD=$(read_secret       "notifications-db-password" "SECRET_NOTIFICATIONS_DB_PASSWORD")
-STATS_DB_PASSWORD=$(read_secret       "statistics-db-password"    "SECRET_STATISTICS_DB_PASSWORD")
-INTERNAL_API_KEY=$(read_secret        "internal-api-key"          "SECRET_INTERNAL_API_KEY")
+DB_PASSWORD=$(read_secret             "SPRING_DATASOURCE_PASSWORD" "SECRET_DB_PASSWORD")
+INTERNAL_API_KEY=$(read_secret        "INTERNAL_API_KEY"          "SECRET_INTERNAL_API_KEY")
 
 echo ""
 echo "==> Creating/updating $SECRET_NAME in namespace $NAMESPACE..."
@@ -112,11 +111,8 @@ echo "==> Creating/updating $SECRET_NAME in namespace $NAMESPACE..."
 kubectl create secret generic "$SECRET_NAME" \
   --namespace="$NAMESPACE" \
   --from-literal=auth-rs256-private-key="$AUTH_RS256_PRIVATE_KEY" \
-  --from-literal=auth-db-password="$AUTH_DB_PASSWORD" \
-  --from-literal=tracking-db-password="$TRACKING_DB_PASSWORD" \
-  --from-literal=notifications-db-password="$NOTIF_DB_PASSWORD" \
-  --from-literal=statistics-db-password="$STATS_DB_PASSWORD" \
-  --from-literal=internal-api-key="$INTERNAL_API_KEY" \
+  --from-literal=SPRING_DATASOURCE_PASSWORD="$DB_PASSWORD" \
+  --from-literal=INTERNAL_API_KEY="$INTERNAL_API_KEY" \
   --dry-run=client -o yaml | kubectl apply -f -
 
 echo ""

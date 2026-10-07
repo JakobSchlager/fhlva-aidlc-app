@@ -96,28 +96,12 @@ echo "Creating Kubernetes Secrets..."
 
 RSA_KEY_CONTENT=$(cat "$RSA_KEY_ABS")
 
-kubectl create secret generic "beer-tracker-auth-service-secrets" \
+# Same name and keys as deploy-azure.sh: the charts consume this Secret via envFrom.
+kubectl create secret generic beer-tracker-secrets \
   --namespace="$NAMESPACE" \
-  --from-literal=auth-db-password="$POSTGRES_PASSWORD" \
   --from-literal=auth-rs256-private-key="$RSA_KEY_CONTENT" \
-  --dry-run=client -o yaml | kubectl apply -f -
-
-kubectl create secret generic "beer-tracker-beer-tracking-service-secrets" \
-  --namespace="$NAMESPACE" \
-  --from-literal=tracking-db-password="$POSTGRES_PASSWORD" \
-  --from-literal=internal-api-key="$INTERNAL_API_KEY" \
-  --dry-run=client -o yaml | kubectl apply -f -
-
-kubectl create secret generic "beer-tracker-health-notification-service-secrets" \
-  --namespace="$NAMESPACE" \
-  --from-literal=notifications-db-password="$POSTGRES_PASSWORD" \
-  --from-literal=internal-api-key="$INTERNAL_API_KEY" \
-  --dry-run=client -o yaml | kubectl apply -f -
-
-kubectl create secret generic "beer-tracker-statistics-service-secrets" \
-  --namespace="$NAMESPACE" \
-  --from-literal=statistics-db-password="$POSTGRES_PASSWORD" \
-  --from-literal=internal-api-key="$INTERNAL_API_KEY" \
+  --from-literal=SPRING_DATASOURCE_PASSWORD="$POSTGRES_PASSWORD" \
+  --from-literal=INTERNAL_API_KEY="$INTERNAL_API_KEY" \
   --dry-run=client -o yaml | kubectl apply -f -
 
 # --- Install Bitnami PostgreSQL (if not already installed) -------------------

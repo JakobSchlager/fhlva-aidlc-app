@@ -1,6 +1,6 @@
 ## Purpose
 
-Local Kubernetes deployment of the Beer Tracker application to a minikube cluster using Helm. Covers Azure-agnostic chart configuration, secrets management via plain Kubernetes Secrets, image building into minikube, ingress setup, in-cluster PostgreSQL, and the deploy script.
+Local Kubernetes deployment of the Beer Tracker application to a minikube cluster using Helm. Covers Azure-agnostic chart configuration, secrets management via the shared `beer-tracker-secrets` Kubernetes Secret (same as Azure), image building into minikube, ingress setup, in-cluster PostgreSQL, and the deploy script.
 
 ## Requirements
 
@@ -9,33 +9,11 @@ The system SHALL deploy the full umbrella Helm chart to a local minikube cluster
 
 #### Scenario: Helm install succeeds on clean minikube
 - **WHEN** `helm upgrade --install beer-tracker ./charts/beer-tracker -f values-minikube.yaml --namespace beer-tracker --create-namespace` is run against a minikube cluster
-- **THEN** the release is installed without errors, and all CRDs (`SecretProviderClass`) are not applied in local mode
+- **THEN** the release is installed without errors, and no Azure-specific resources (such as `SecretProviderClass`) are rendered
 
 #### Scenario: All pods reach Running state
 - **WHEN** the Helm release is installed with `values-minikube.yaml`
 - **THEN** all five application pods reach `Running` state within 5 minutes and pass liveness/readiness probes
-
-### Requirement: secretsProvider flag controls CSI vs plain-secret path
-Each Helm sub-chart SHALL support a `secretsProvider` value accepting `azure` (default) or `local`. When set to `local`, the deployment MUST omit the CSI volume and volume mount, and the `SecretProviderClass` resource MUST NOT be rendered.
-
-#### Scenario: local mode skips CSI volume
-- **WHEN** `secretsProvider: local` is set
-- **THEN** the rendered deployment manifest contains no `csi` volume block and no `secrets-store` volume mount
-
-#### Scenario: azure mode renders CSI volume
-- **WHEN** `secretsProvider: azure` is set (or omitted, using default)
-- **THEN** the rendered deployment manifest contains the `secrets-store.csi.k8s.io` volume and corresponding volume mount, unchanged from current behaviour
-
-### Requirement: Plain Kubernetes Secrets provide secret values in local mode
-When `secretsProvider: local`, all secrets (database passwords, RSA private key, internal API key) SHALL be provided via pre-existing Kubernetes `Secret` objects whose names match the pattern `<release>-<chart>-secrets`, so that existing `secretKeyRef` and `AUTH_PRIVATE_KEY_PATH` environment variable references in the deployment templates resolve correctly.
-
-#### Scenario: Secret values available to pods
-- **WHEN** Kubernetes Secrets are created before `helm install` and `secretsProvider: local` is set
-- **THEN** all pods can read their required environment variables and file mounts without errors
-
-#### Scenario: Missing Kubernetes Secret
-- **WHEN** a required Kubernetes Secret is absent and `secretsProvider: local` is set
-- **THEN** the pod enters `Pending` or `CrashLoopBackOff` with a Kubernetes event clearly indicating the missing secret
 
 ### Requirement: Images built into minikube's Docker daemon
 The system SHALL document and script the process of building all five service images directly into minikube's Docker daemon using `eval $(minikube docker-env)`, and `values-minikube.yaml` SHALL set `imagePullPolicy: Never` for all services.
@@ -67,7 +45,7 @@ The system SHALL provide a PostgreSQL deployment (or instruct use of the Bitnami
 - **THEN** all services establish database connections successfully
 
 ### Requirement: deploy-minikube.sh script automates the setup
-The system SHALL provide `scripts/deploy-minikube.sh` that automates: enabling the ingress addon, activating the minikube Docker environment, building all images, creating Kubernetes Secrets from `.env`, running `helm dependency update`, and running `helm upgrade --install` with `values-minikube.yaml`.
+The system SHALL provide `scripts/deploy-minikube.sh` that automates: enabling the ingress addon, building all images into minikube, creating the shared `beer-tracker-secrets` Kubernetes Secret from `.env`, installing in-cluster PostgreSQL and initialising the databases, running `helm dependency update`, and running `helm upgrade --install` with `values-minikube.yaml`. The Secret creation SHALL be idempotent and SHALL use `kubectl create secret generic --dry-run=client -o yaml | kubectl apply -f -` or equivalent.
 
 #### Scenario: Script is idempotent
 - **WHEN** `scripts/deploy-minikube.sh` is run a second time without changes
@@ -76,3 +54,29 @@ The system SHALL provide `scripts/deploy-minikube.sh` that automates: enabling t
 #### Scenario: Script fails on missing minikube
 - **WHEN** `scripts/deploy-minikube.sh` is run on a machine where minikube is not installed or not started
 - **THEN** the script exits with a non-zero code and an informative error message
+
+#### Scenario: Secret values come from .env
+- **WHEN** `scripts/deploy-minikube.sh` runs with `.env` defining `POSTGRES_PASSWORD`, `INTERNAL_API_KEY` and `AUTH_RSA_KEY_PATH`
+- **THEN** `SPRING_DATASOURCE_PASSWORD` equals `POSTGRES_PASSWORD`, `INTERNAL_API_KEY` equals the `.env` value, and `auth-rs256-private-key` holds the content of the key file
+
+### Requirement: Shared beer-tracker-secrets provides secret values on minikube
+The minikube deployment SHALL provide all application secrets through a single Kubernetes Secret named `beer-tracker-secrets` in the `beer-tracker` namespace, with the same name and keys as the Azure deployment: `auth-rs256-private-key`, `SPRING_DATASOURCE_PASSWORD` and `INTERNAL_API_KEY`. The Secret SHALL exist before `helm upgrade --install` runs. No per-service Secrets (`<release>-<chart>-secrets`) SHALL be created.
+
+#### Scenario: Secret has the keys the charts consume
+- **WHEN** `kubectl get secret beer-tracker-secrets -n beer-tracker -o json` is run after `scripts/deploy-minikube.sh`
+- **THEN** the Secret exists and contains exactly the keys `auth-rs256-private-key`, `SPRING_DATASOURCE_PASSWORD` and `INTERNAL_API_KEY`, each non-empty
+
+#### Scenario: No pod is stuck in CreateContainerConfigError
+- **WHEN** the Helm release is installed after the Secret has been created
+- **THEN** no Beer Tracker pod reports `CreateContainerConfigError` and each reaches `Ready`
+
+#### Scenario: No per-service Secrets are created
+- **WHEN** `kubectl get secrets -n beer-tracker` is run after `scripts/deploy-minikube.sh`
+- **THEN** no Secret matching `beer-tracker-*-service-secrets` exists
+
+### Requirement: values-minikube.yaml configures the private key path
+`values-minikube.yaml` SHALL set `AUTH_PRIVATE_KEY_PATH` to `/etc/secrets/auth-rs256-private-key` for auth-service, matching `values-azure.yaml`, so the service finds the RSA key mounted from `beer-tracker-secrets`.
+
+#### Scenario: auth-service finds its signing key
+- **WHEN** auth-service starts on minikube
+- **THEN** it reads the private key from `/etc/secrets/auth-rs256-private-key` and starts without a missing-key error

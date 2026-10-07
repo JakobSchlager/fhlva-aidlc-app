@@ -8,17 +8,16 @@ auth-service:
     repository: auth-service
     tag: latest
     pullPolicy: Never
-  secretsProvider: local
   env:
     SPRING_DATASOURCE_URL: "jdbc:postgresql://postgresql:5432/auth_db"
     SPRING_DATASOURCE_USERNAME: "postgres"
+    AUTH_PRIVATE_KEY_PATH: "/etc/secrets/auth-rs256-private-key"
 
 beer-tracking-service:
   image:
     repository: beer-tracking-service
     tag: latest
     pullPolicy: Never
-  secretsProvider: local
   env:
     SPRING_DATASOURCE_URL: "jdbc:postgresql://postgresql:5432/tracking_db"
     SPRING_DATASOURCE_USERNAME: "postgres"
@@ -29,7 +28,6 @@ health-notification-service:
     repository: health-notification-service
     tag: latest
     pullPolicy: Never
-  secretsProvider: local
   env:
     SPRING_DATASOURCE_URL: "jdbc:postgresql://postgresql:5432/notifications_db"
     SPRING_DATASOURCE_USERNAME: "postgres"
@@ -41,7 +39,6 @@ statistics-service:
     repository: statistics-service
     tag: latest
     pullPolicy: Never
-  secretsProvider: local
   env:
     SPRING_DATASOURCE_URL: "jdbc:postgresql://postgresql:5432/statistics_db"
     SPRING_DATASOURCE_USERNAME: "postgres"
@@ -53,4 +50,3 @@ frontend:
     repository: frontend
     tag: latest
     pullPolicy: Never
-  secretsProvider: local

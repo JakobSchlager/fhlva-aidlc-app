@@ -93,7 +93,7 @@ A single PostgreSQL 16 instance (compose) or a Bitnami PostgreSQL chart / Azure 
 | Scenario | Key delivery mechanism |
 |---|---|
 | Compose | `secrets/auth-rs256-private-key.pem` bind-mounted read-only into the container |
-| minikube | `deploy-minikube.sh` reads `.env` → `kubectl create secret generic` → pod consumes via `envFrom` |
+| minikube | `deploy-minikube.sh` reads `.env` → `kubectl create secret generic beer-tracker-secrets` → pod consumes via `envFrom` |
 | Azure AKS | `deploy-azure.sh` reads `AUTH_RSA_KEY_PATH` → `kubectl create secret generic beer-tracker-secrets` → pod consumes via `envFrom` |
 
 ---
@@ -200,7 +200,7 @@ Deploys the Helm umbrella chart to a local minikube cluster. Useful for validati
    ./scripts/deploy-minikube.sh
    ```
 
-   The script reads `.env`, creates the `beer-tracker` namespace, creates a `kubectl create secret generic` with all required values, builds images into the minikube Docker daemon, and runs `helm upgrade --install`.
+   The script reads `.env`, creates the `beer-tracker` namespace, creates the `beer-tracker-secrets` Secret (keys `auth-rs256-private-key`, `SPRING_DATASOURCE_PASSWORD`, `INTERNAL_API_KEY`, the same as on Azure) from `.env`, builds images into the minikube Docker daemon, and runs `helm upgrade --install`.
 
 4. Expose the ingress (if needed):
 
@@ -264,7 +264,7 @@ Stop the forward with `Ctrl-C`.
 | Symptom | Resolution |
 |---|---|
 | `ImagePullBackOff` | Images must be built inside the minikube Docker daemon. Run `eval $(minikube docker-env)` then rebuild. `values-minikube.yaml` sets `imagePullPolicy: Never`. |
-| `Secret not found` | `deploy-minikube.sh` creates the secret. Re-run the script or manually create the secret with `kubectl create secret generic`. |
+| `Secret not found` | `deploy-minikube.sh` creates `beer-tracker-secrets`. Re-run the script, or create it manually with `kubectl create secret generic beer-tracker-secrets` using the keys `auth-rs256-private-key`, `SPRING_DATASOURCE_PASSWORD` and `INTERNAL_API_KEY`. Pods in `CreateContainerConfigError` usually mean this Secret is missing or has different key names. |
 | Ingress returns 404 / not routing | Confirm `minikube addons enable ingress` completed. Check ingress class is `nginx` (set in `values-minikube.yaml`). |
 | Pods stuck in `Pending` | Check node resources: `kubectl describe node minikube`. Increase minikube memory: `minikube start --memory=4096`. |
 
@@ -449,7 +449,7 @@ The script grants the SP the `Azure Kubernetes Service RBAC Cluster Admin` role 
 
    The script reads ACR login server and AKS cluster name from `terraform output`, logs in to ACR using `--expose-token` (compatible with both Docker and Podman), installs Bitnami PostgreSQL in-cluster, initialises the four databases, creates or updates `beer-tracker-secrets`, builds and pushes all five images tagged at the current git SHA, and deploys the Helm chart.
 
-   > **Secret rotation:** To update secrets without a full redeploy, use `scripts/set-k8s-secrets.sh --environment dev` and then `kubectl rollout restart deployment -n beer-tracker`.
+   > **Secret rotation:** To update secrets without a full redeploy, use `scripts/set-k8s-secrets.sh --environment dev` and then `kubectl rollout restart deployment -n beer-tracker`. The script prompts for the private key, one database password and the internal API key; for non-interactive use set `SECRET_AUTH_RS256_PRIVATE_KEY`, `SECRET_DB_PASSWORD` and `SECRET_INTERNAL_API_KEY`.
 
 ### Verification
 
