@@ -311,34 +311,18 @@ az account set --subscription <subscription-id-or-name>
 
 **Terraform** authenticates via the active Azure CLI session automatically. No service principal or environment variables are needed for local use.
 
-**CI/CD service principal (optional):** To let GitHub Actions deploy, create a service principal and store its credentials as the `AZURE_CREDENTIALS` secret:
-
-```bash
-# Create the SP with Owner role (needed to create role assignments)
-az ad sp create-for-rbac \
-  --name "github-actions-beer-tracker" \
-  --role Owner \
-  --scopes /subscriptions/$(az account show --query id -o tsv) \
-  --sdk-auth
-```
-
-Copy the full JSON output to the `AZURE_CREDENTIALS` GitHub Actions secret. To grant the SP access to the AKS cluster on first deploy, set `GH_SP_OBJECT_ID` when running `deploy-azure.sh`:
-
-```bash
-export GH_SP_OBJECT_ID=$(az ad sp show --id <app-id-from-above> --query id -o tsv)
-./scripts/deploy-azure.sh
-```
-
-The script grants the SP the `Azure Kubernetes Service RBAC Cluster Admin` role on the cluster. Subsequent CI/CD runs do not need `GH_SP_OBJECT_ID` set.
-
 ### Prerequisites
 
 - **Terraform ≥ 1.9**
 - **Azure CLI (`az`) ≥ 2.60** logged in with Owner or Contributor + User Access Administrator on the subscription
 - **Docker or Podman** (for building and pushing images to ACR; the deploy script uses `--expose-token` and is compatible with both)
 - **kubectl**
+- **kubelogin** — required because the AKS cluster has local accounts disabled and uses Entra ID (Azure AD) authentication, so `kubectl` calls the `kubelogin` plugin to obtain a token. `az aks install-cli` installs both `kubectl` and `kubelogin` and can pin their versions (`--client-version`, `--kubelogin-version`); other options are in the [kubelogin install guide](https://azure.github.io/kubelogin/install.html) (accessed 2026-10-08).
 - **helm ≥ 3.10**
 - `openssl` available on `$PATH`
+- **AKS cluster access**: the cluster uses Entra ID with Azure RBAC and has local accounts disabled, so `kubectl` also needs the `Azure Kubernetes Service RBAC Cluster Admin` role on the cluster (Owner or Contributor on the subscription is not enough). Terraform grants it to the Entra ID object IDs listed in `local.aks_cluster_admin_object_ids` in `infra/terraform/stages/dev/main.tf` (add yours; find it with `az ad signed-in-user show --query id -o tsv`); with an empty list no assignment is created.
+
+  > Checked 2026-10-08: after `terraform apply` with an object ID in the list, `kubectl` worked against the cluster without a manual role assignment (reported by the project owner; the deploy scripts were not re-run for this check).
 
 ### Setup
 
@@ -354,12 +338,12 @@ The script grants the SP the `Azure Kubernetes Service RBAC Cluster Admin` role 
 
    ```bash
    az group create \
-     --name fhooe-aidlc-dev-rg \
+     --name <deployment-resource-group-name> \
      --location germanywestcentral
 
    az monitor log-analytics workspace create \
-     --resource-group fhooe-aidlc-dev-rg \
-     --workspace-name fhooe-aidlc-dev-law \
+     --resource-group <deployment-resource-group-name> \
+     --workspace-name <log-analytics-workspace-name> \
      --location germanywestcentral
    ```
 
@@ -367,7 +351,7 @@ The script grants the SP the `Azure Kubernetes Service RBAC Cluster Admin` role 
 
    ```bash
    scripts/bootstrap-tf-state.sh \
-     --resource-group  fhooe-aidlc-tfstate-rg \
+     --resource-group  <terraform-resource-group-name> \
      --storage-account <globally-unique-name> \
      --container       tfstate \
      --location        germanywestcentral
@@ -386,31 +370,6 @@ The script grants the SP the `Azure Kubernetes Service RBAC Cluster Admin` role 
    terraform apply tfplan
    ```
 
-5a. Grant operator identities the `Azure Kubernetes Service RBAC Cluster Admin` role on the newly created cluster (repeat for each operator or CI/CD service principal):
-
-   ```bash
-   AKS_ID=$(az aks show \
-     --resource-group fhooe-aidlc-dev-rg \
-     --name "$(terraform output -raw aks_cluster_name)" \
-     --query id -o tsv)
-
-   az role assignment create \
-     --assignee <user-email-or-sp-object-id> \
-     --role "Azure Kubernetes Service RBAC Cluster Admin" \
-     --scope "$AKS_ID"
-   ```
-
-   This is required because the cluster uses Entra ID + Azure RBAC with local accounts disabled. Without this role, `kubectl` commands fail with a Forbidden error even after `az aks get-credentials`.
-
-   After granting the role, refresh your kubeconfig to get a token that reflects the new assignment:
-
-   ```bash
-   az aks get-credentials \
-     --resource-group fhooe-aidlc-dev-rg \
-     --name "$(terraform output -raw aks_cluster_name)" \
-     --overwrite-existing
-   ```
-
 6. Verify `kubectl` is configured (optional — `deploy-azure.sh` does this automatically):
 
    ```bash
@@ -418,10 +377,12 @@ The script grants the SP the `Azure Kubernetes Service RBAC Cluster Admin` role 
    AKS_CLUSTER_NAME=$(terraform output -raw aks_cluster_name)
 
    az aks get-credentials \
-     --resource-group fhooe-aidlc-dev-rg \
+     --resource-group <deployment-resource-group-name> \
      --name "$AKS_CLUSTER_NAME" \
      --overwrite-existing
    ```
+
+   `kubectl` access to this cluster requires `kubelogin` on your `PATH` (see Prerequisites); without it, `kubectl` commands fail when they try to obtain a token.
 
    Skip this step if you are proceeding directly to Phase 2; the deployment script configures credentials as part of its run.
 
@@ -442,7 +403,7 @@ The script grants the SP the `Azure Kubernetes Service RBAC Cluster Admin` role 
    Then export them:
 
    ```bash
-   export AZURE_RESOURCE_GROUP=fhooe-aidlc-dev-rg
+   export AZURE_RESOURCE_GROUP=<deployment-resource-group-name>
    export POSTGRES_APP_PASSWORD=<output of first command>
    export INTERNAL_API_KEY=<output of second command>
    export AUTH_RSA_KEY_PATH=secrets/auth-rs256-private-key.pem
@@ -476,6 +437,7 @@ Note the `ADDRESS` on the ingress — that is the Application Gateway public IP.
 | State lock not released | If a previous apply was interrupted, remove the lock with `az storage blob lease break` on the state blob or `terraform force-unlock <lock-id>`. |
 | Application Gateway returns 502 | Backend health probe failing. Check pod readiness (`kubectl get pods`) and ensure `initialDelaySeconds` is long enough for Spring Boot startup (~30 s). |
 | ACR push denied | Re-login: `az acr login --name <acr-name>`. Confirm the identity has `AcrPush` role on the registry. |
+| `Forbidden ... User does not have access to the resource in Azure. Update role assignment to allow access.` from `kubectl` | You are authenticated (kubelogin works) but hold no AKS RBAC role. Add your object ID to `local.aks_cluster_admin_object_ids` and re-apply Terraform, or assign it by hand: `az role assignment create --assignee <upn-or-object-id> --role "Azure Kubernetes Service RBAC Cluster Admin" --scope $(az aks show -g <resource-group> -n <cluster-name> --query id -o tsv)`. Role assignments can take a few minutes to take effect; retry afterwards. |
 
 ---
 

@@ -30,6 +30,7 @@ newer, while the main README says Podman 4 or newer; only 6.0.2 was tried with V
 | Terraform | 1.16.1 |
 | Azure CLI | 2.91.0 |
 | kubectl / Helm / minikube | v1.34.1 / v4.3.0 / v1.38.1 |
+| kubelogin | v0.2.20, installed with `az aks install-cli` (no checksum check, unlike the other tools) |
 | Podman (inside the container) | 5.8.7, with `podman-docker` so `docker` runs Podman |
 | Compose provider | `podman-compose` 1.6.0 (the only one installed) |
 | PostgreSQL client, git, openssl | distro versions of the Fedora base image |
@@ -160,6 +161,10 @@ container rebuild (`az account show` still worked without logging in again; repo
 `terraform init -backend=false && terraform validate` succeeds in `infra/terraform/stages/dev`; `plan` and
 `apply` were not run. `deploy-azure.sh` finds `docker` (Podman) and `git`; the login, build and push steps were
 not run.
+
+> **VERIFY:** `kubelogin` is installed (the image builds and `kubelogin --version` runs, checked 2026-10-08 on Linux/WSL), but
+> `az aks get-credentials` followed by `kubectl` against the AKS cluster through kubelogin has not been run from the
+> container. The kubelogin login mode (device code or the Azure CLI token via `kubelogin convert-kubeconfig`) is undecided.
 
 **Named volumes** keep these across rebuilds: nested Podman storage, the Maven cache, Azure CLI and kubeconfig
 state, minikube data, and `node_modules` for `frontend/` and `e2e/`. They are named after the devcontainer id;

@@ -22,6 +22,7 @@ ARG MINIKUBE_VERSION=v1.38.1
 ARG KUBECTL_VERSION=v1.34.1
 ARG HELM_VERSION=v4.3.0
 ARG AZURE_CLI_VERSION=2.91.0
+ARG KUBELOGIN_VERSION=v0.2.20
 
 # Compose provider (design D5): podman-compose is the ONLY provider. docker-compose is deliberately not
 # installed: on Fedora 44 it pulls in docker-compose-switch, whose /usr/bin/docker-compose shim calls
@@ -75,6 +76,17 @@ RUN rpm --import https://packages.microsoft.com/keys/microsoft.asc \
  && dnf -y install https://packages.microsoft.com/config/rhel/9.0/packages-microsoft-prod.rpm \
  && dnf -y install "azure-cli-${AZURE_CLI_VERSION}" \
  && dnf clean all
+
+# kubelogin: the AKS cluster has local accounts disabled (Entra ID only), so kubectl needs this credential
+# plugin. Installed with `az aks install-cli` (documented, needs no `az login`, pinnable). Unlike the tools
+# above it has no checksum check. The command always downloads a kubectl too; that copy goes to a throwaway
+# directory and is deleted so the checksum-verified kubectl above stays in place. The install path must end
+# in "kubectl" or the command rejects it.
+RUN az aks install-cli \
+        --client-version "${KUBECTL_VERSION}" --install-location /tmp/kubectl-unused/kubectl \
+        --kubelogin-version "${KUBELOGIN_VERSION}" --kubelogin-install-location /usr/local/bin/kubelogin \
+ && rm -rf /tmp/kubectl-unused \
+ && kubelogin --version
 
 COPY containers.conf /etc/containers/containers.conf
 COPY registries-unqualified.conf /etc/containers/registries.conf.d/00-unqualified.conf

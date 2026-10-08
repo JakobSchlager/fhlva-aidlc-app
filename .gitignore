@@ -113,3 +113,5 @@ infra/terraform/secrets.tfvars
 !infra/terraform/dev.tfvars
 !infra/terraform/staging.tfvars
 infra/terraform/stages/dev/tfplan
+dynakube.yaml
+.local_main.tf

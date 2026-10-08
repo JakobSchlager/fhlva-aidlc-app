@@ -12,7 +12,7 @@ Terraform infrastructure for the Beer Tracker application: networking (VNet + Ap
 
 ## One-time setup
 
-### 1. Fill in the subscription ID
+### 1. Adapt values in main.tf
 
 Edit the `locals` block in `stages/dev/main.tf` and replace the placeholder subscription ID:
 
@@ -20,13 +20,19 @@ Edit the `locals` block in `stages/dev/main.tf` and replace the placeholder subs
 infra/terraform/stages/dev/main.tf  →  subscription_id = "FILL_IN_DEV_SUBSCRIPTION_ID"
 ```
 
+Change the `ingress_allowed_ips` and define IP ranges, which are allowed to access the application.
+
+Change the `api_server_authorized_ips` and define IP ranges, which are allowed to access the k8s API server.
+
+Change the `alert_email_address` to your email address.
+
 ### 2. Create the remote state storage account
 
 Run this once before the first `terraform init`:
 
 ```bash
 scripts/bootstrap-tf-state.sh \
-  --resource-group  fhooe-aidlc-tfstate-rg \
+  --resource-group  <terraform-resource-group-name> \
   --storage-account <globally-unique-name> \
   --location        germanywestcentral
 ```
@@ -82,5 +88,5 @@ The stage is a self-contained Terraform root. Running `terraform` commands insid
 To tear down all Terraform-managed resources, delete the resource group:
 
 ```bash
-az group delete --name fhooe-aidlc-dev-rg --yes --no-wait
+az group delete --name <deployment-resource-group-name> --yes --no-wait
 ```

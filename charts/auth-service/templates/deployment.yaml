@@ -46,18 +46,24 @@ spec:
             - name: auth-private-key
               mountPath: /etc/secrets
               readOnly: true
+          # Startup is slow under CPU throttling and with the Dynatrace code modules injected
+          # (~80s observed); liveness/readiness only begin once this probe has succeeded.
+          startupProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: {{ .Values.service.port }}
+            periodSeconds: 10
+            failureThreshold: 30
           livenessProbe:
             httpGet:
               path: /actuator/health/liveness
               port: {{ .Values.service.port }}
-            initialDelaySeconds: 60
             periodSeconds: 10
             failureThreshold: 3
           readinessProbe:
             httpGet:
               path: /actuator/health/readiness
               port: {{ .Values.service.port }}
-            initialDelaySeconds: 60
             periodSeconds: 10
             failureThreshold: 3
           resources:

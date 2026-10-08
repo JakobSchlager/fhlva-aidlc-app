@@ -106,6 +106,24 @@ resource "azurerm_application_gateway" "main" {
     backend_http_settings_name = "default-http-settings"
     priority                   = 100
   }
+
+  # The Application Gateway Ingress Controller (AGIC) owns listeners, pools, probes, routing
+  # rules and its own tags at runtime. Without this, every apply resets them to the baseline
+  # above and the gateway returns 502 until AGIC is restarted.
+  lifecycle {
+    ignore_changes = [
+      backend_address_pool,
+      backend_http_settings,
+      frontend_port,
+      http_listener,
+      probe,
+      redirect_configuration,
+      request_routing_rule,
+      ssl_certificate,
+      url_path_map,
+      tags,
+    ]
+  }
 }
 
 resource "azurerm_network_security_group" "appgw" {

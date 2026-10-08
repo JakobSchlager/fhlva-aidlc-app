@@ -15,6 +15,11 @@ locals {
 
   alert_email_address = "platform@example.com"
 
+  # Entra ID object IDs of the users who may administer the AKS cluster with kubectl
+  # (role: Azure Kubernetes Service RBAC Cluster Admin). Find yours with:
+  #   az ad signed-in-user show --query id -o tsv
+  aks_cluster_admin_object_ids = []
+
   tags = {
     project     = local.project_name
     environment = local.environment
@@ -88,4 +93,12 @@ resource "azurerm_role_assignment" "kubelet_acr_pull" {
   scope                = module.acr.acr_id
   role_definition_name = "AcrPull"
   principal_id         = module.aks.kubelet_identity_object_id
+}
+
+resource "azurerm_role_assignment" "aks_cluster_admin" {
+  for_each = toset(local.aks_cluster_admin_object_ids)
+
+  scope                = module.aks.cluster_id
+  role_definition_name = "Azure Kubernetes Service RBAC Cluster Admin"
+  principal_id         = each.value
 }

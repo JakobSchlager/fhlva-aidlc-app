@@ -33,15 +33,19 @@ The `modules/aks` module SHALL create a managed AKS cluster with the following f
 - **THEN** running pod IPs SHALL fall within `10.244.0.0/16` and SHALL NOT fall within the AKS subnet range (`10.0.1.0/24`)
 
 ### Requirement: System node pool with autoscaling
-The `modules/aks` module SHALL create a single system node pool named `system` with VM size `Standard_D2s_v3`, OS disk size 128 GB, OS disk type `Managed`, OS type `Linux`, OS SKU `AzureLinux`, minimum node count 2, maximum node count 5, max pods per node 110, and max surge upgrade setting of `33%`.
+The `modules/aks` module SHALL create a single system node pool named `system` with VM size `Standard_D4s_v3`, OS disk size 128 GB, OS disk type `Managed`, OS type `Linux`, OS SKU `AzureLinux`, minimum node count 2, maximum node count 5, max pods per node 110, and max surge upgrade setting of `33%`. The default node pool SHALL set `temporary_name_for_rotation`, so that a later change of VM size rotates the pool instead of being rejected.
 
 #### Scenario: Node pool autoscaling is active within bounds
 - **WHEN** the aks module is applied
 - **THEN** the system node pool SHALL have `auto_scaling_enabled = true`, `min_count = 2`, and `max_count = 5`
 
-#### Scenario: Node pool uses AzureLinux on Standard_D2s_v3
+#### Scenario: Node pool uses AzureLinux on Standard_D4s_v3
 - **WHEN** the aks module is applied
-- **THEN** `vm_size` SHALL be `Standard_D2s_v3` and `os_sku` SHALL be `AzureLinux`
+- **THEN** `vm_size` SHALL be `Standard_D4s_v3` and `os_sku` SHALL be `AzureLinux`
+
+#### Scenario: Rotation name is set for resizing
+- **WHEN** the aks module is read
+- **THEN** the default node pool SHALL define `temporary_name_for_rotation` with a name different from `system`
 
 ### Requirement: Workload Identity and OIDC issuer
 The `modules/aks` module SHALL enable the OIDC issuer profile and Workload Identity security profile on the cluster, and the OIDC issuer URL SHALL be emitted as an output so that federated credentials for workload identities can be created. No workload in this repository currently uses them (secrets are native Kubernetes Secrets, see `kubernetes-secrets-bootstrap`). The OIDC issuer SHALL remain enabled: Azure does not allow disabling it once enabled, and the azurerm provider documents that disabling `oidc_issuer_enabled` forces a new cluster to be created. Workload Identity requires the OIDC issuer.

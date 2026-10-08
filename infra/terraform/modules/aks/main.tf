@@ -36,7 +36,7 @@ resource "azurerm_kubernetes_cluster" "main" {
 
   default_node_pool {
     name                 = "system"
-    vm_size              = "Standard_D2s_v3"
+    vm_size              = "Standard_D4s_v3"
     os_disk_size_gb      = 128
     os_disk_type         = "Managed"
     os_sku               = "AzureLinux"
@@ -45,6 +45,9 @@ resource "azurerm_kubernetes_cluster" "main" {
     max_count            = 5
     max_pods             = 110
     vnet_subnet_id       = var.aks_subnet_id
+
+    # Required by the provider to resize the default pool; the rotation does not cordon and drain.
+    temporary_name_for_rotation = "tmpsystem"
 
     upgrade_settings {
       max_surge = "33%"
