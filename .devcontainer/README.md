@@ -14,7 +14,7 @@ Design and evidence: [`openspec/changes/archive/2026-10-07-add-podman-devcontain
 | **Windows 11** with Podman Desktop (WSL machine, rootful), VS Code | **Tested** through the VS Code UI, 2026-10-07: opening the container, compose stack, end-to-end tests, minikube deployment, `az login`. Single runs. Terraform validation and the other Azure steps were reported done without captured output. |
 | Linux under WSL2, rootful Podman | Tested with a throwaway image and scripts, **not** through VS Code. |
 | **Native Linux** | **Not tested.** See [Linux](#linux-not-tested). |
-| **macOS** on Apple Silicon (arm64), Podman 6.1.3, applehv machine, rootful | **Partly tested**, 2026-10-09, single runs: image builds natively for arm64, container starts, compose stack, `devcontainer-install-playwright`, e2e suite against compose (1 failure), minikube deployment (`devcontainer-minikube-start` 1 min 42 s including downloads, `deploy-minikube.sh` 8 min), e2e suite against minikube through the port-forward (16 passed, 1 skipped, 2 failed). All three failures are races in the tests, not platform-specific: "submitting a beer entry causes it to appear in history" navigates away before its POST completes (passed 10 of 10 repeats afterwards), and "delete entry removes the row" counts the rows before they have loaded. **Not yet run:** Azure, the VS Code UI. See [macOS](#macos-partly-tested). |
+| **macOS** on Apple Silicon (arm64), Podman 6.1.3, applehv machine, rootful | **Partly tested**, 2026-10-09, single runs: image builds natively for arm64, container starts, compose stack, `devcontainer-install-playwright`, e2e suite against compose (1 failure), minikube deployment (`devcontainer-minikube-start` 1 min 42 s including downloads, `deploy-minikube.sh` 8 min), e2e suite against minikube through the port-forward (16 passed, 1 skipped, 2 failed). All three failures were races in the tests, not platform-specific: "submitting a beer entry causes it to appear in history" navigated away before its POST completed, and "delete entry removes the row" counted the rows before they had loaded. Both are fixed; afterwards `dashboard.spec.ts` and `history.spec.ts` passed 5 of 5 repeats against minikube. **Not yet run:** Azure, the VS Code UI. See [macOS](#macos-partly-tested). |
 
 Tested combination: VS Code 1.140.0, Dev Containers extension 0.469.0, Podman 6.0.2 on the host (Windows 11
 Enterprise 10.0.26200). Other versions may work; nobody has checked. The VS Code documentation says Podman 5 or
@@ -170,8 +170,9 @@ devcontainer-install-playwright          # once; about 40 s on a Linux host, saf
 cd e2e && npm run test:e2e
 ```
 `npx playwright install --with-deps` does **not** work here (it uses `apt-get`; the image is Fedora). On
-Windows the suite gave 18 passed and 1 skipped. One test skips itself, either because the history date-filter
-inputs were not found or because no notification warning appeared within 6 minutes; which one was not recorded.
+Windows the suite gave 18 passed and 1 skipped. One test skips itself: "date-range filter with future dates shows no
+results" (seen on macOS, 5 of 5 runs), because the From/To `<label>`s in `frontend/src/pages/HistoryPage.tsx` are
+not associated with their inputs, so `getByLabel` finds nothing. Which test skipped on Windows was not recorded.
 
 **minikube.** Stop the compose stack first (both use port 8080 and a lot of memory), then:
 ```

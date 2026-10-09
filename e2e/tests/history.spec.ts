@@ -2,11 +2,14 @@ import { test, expect } from '../fixtures';
 
 test.beforeEach(async ({ loggedInPage: page, accessToken }) => {
   // Seed one entry via API (Bearer token required) so the history page has something to show
-  await page.request.post('/tracking/entries', {
+  const seeded = await page.request.post('/tracking/entries', {
     data: { beerName: 'HistoryBeer', volumeMl: 330, abv: 4.5 },
     headers: { Authorization: `Bearer ${accessToken}` },
   });
+  expect(seeded.status()).toBe(201);
   await page.goto('/history');
+  // Entries load asynchronously; wait for them so non-waiting checks (count(), isVisible()) see the page
+  await expect(page.getByText('HistoryBeer')).toBeVisible({ timeout: 8_000 });
 });
 
 test('history page loads and shows entries', async ({ loggedInPage: page }) => {
