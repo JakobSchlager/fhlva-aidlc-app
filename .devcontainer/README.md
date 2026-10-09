@@ -14,7 +14,7 @@ Design and evidence: [`openspec/changes/archive/2026-10-07-add-podman-devcontain
 | **Windows 11** with Podman Desktop (WSL machine, rootful), VS Code | **Tested** through the VS Code UI, 2026-10-07: opening the container, compose stack, end-to-end tests, minikube deployment, `az login`. Single runs. Terraform validation and the other Azure steps were reported done without captured output. |
 | Linux under WSL2, rootful Podman | Tested with a throwaway image and scripts, **not** through VS Code. |
 | **Native Linux** | **Not tested.** See [Linux](#linux-not-tested). |
-| **macOS** on Apple Silicon (arm64), Podman 6.1.3, applehv machine, rootful | **Partly tested**, 2026-10-09: image builds natively for arm64, container starts, compose stack up (nginx answers on 8080), `devcontainer-install-playwright`, e2e suite (one failure: "submitting a beer entry causes it to appear in history" navigates away before its POST completes, a race in the test and not platform-specific; it then passed 10 of 10 repeats). **Not yet run:** minikube, Azure, the VS Code UI. See [macOS](#macos-partly-tested). |
+| **macOS** on Apple Silicon (arm64), Podman 6.1.3, applehv machine, rootful | **Partly tested**, 2026-10-09, single runs: image builds natively for arm64, container starts, compose stack, `devcontainer-install-playwright`, e2e suite against compose (1 failure), minikube deployment (`devcontainer-minikube-start` 1 min 42 s including downloads, `deploy-minikube.sh` 8 min), e2e suite against minikube through the port-forward (16 passed, 1 skipped, 2 failed). All three failures are races in the tests, not platform-specific: "submitting a beer entry causes it to appear in history" navigates away before its POST completes (passed 10 of 10 repeats afterwards), and "delete entry removes the row" counts the rows before they have loaded. **Not yet run:** Azure, the VS Code UI. See [macOS](#macos-partly-tested). |
 
 Tested combination: VS Code 1.140.0, Dev Containers extension 0.469.0, Podman 6.0.2 on the host (Windows 11
 Enterprise 10.0.26200). Other versions may work; nobody has checked. The VS Code documentation says Podman 5 or
@@ -97,7 +97,7 @@ setting probably cannot carry arguments; neither point was tried.
 
 ### macOS (partly tested)
 
-> **TODO(macOS tester):** run the minikube deployment on macOS and record the results here.
+> **TODO(macOS tester):** try Azure and the VS Code UI on macOS and record the results here.
 
 Tried on macOS 26.7.1, Apple Silicon, Podman 6.1.3 with the applehv provider. Intel Macs were not tried.
 
@@ -233,6 +233,7 @@ execution as the user running the API".
 | `cat /proc/self/cgroup` prints `0::/`, or minikube fails with `open memory.max ... No such file` | The cgroup setup did not run. Run `devcontainer-cgroup-init` and open a new terminal. |
 | VS Code loses the connection after a `podman restart` | Reload the window. |
 | `unsupported UNC path` when the container starts | Set `dev.containers.mountWaylandSocket` to `false`. |
+| On minikube, about 2 in 5 requests through the ingress hang; ingress-nginx logs `pthread_create() failed (11: Resource temporarily unavailable)` and `worker process ... cannot be respawned` | The minikube node was created with Podman's default pids limit, so every pod container is capped at 307 threads, and ingress-nginx exceeds that on a config reload when the machine has several CPUs (5 on the Mac where this was seen). `.devcontainer/containers.conf` sets `pids_limit = 0`; in an older container, rebuild it, then `minikube delete` and `devcontainer-minikube-start`. Check with `minikube ssh -- systemctl show --property DefaultTasksMax` (307 is the bad value). |
 | `podman compose up -d` hangs, or the Spring services stay `Created` | Podman is not running the health checks. `devcontainer-healthcheck-runner status`; start it with `devcontainer-healthcheck-runner start`; read the log. |
 | `git`: "detected dubious ownership" | `git config --global --add safe.directory "$PWD"` (the first-creation step normally does this). |
 | e2e tests fail with text "hidden" and screenshots without text | Fonts are missing. Run `devcontainer-install-playwright` again. |
