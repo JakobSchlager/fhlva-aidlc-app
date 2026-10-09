@@ -14,7 +14,7 @@ Design and evidence: [`openspec/changes/archive/2026-10-07-add-podman-devcontain
 | **Windows 11** with Podman Desktop (WSL machine, rootful), VS Code | **Tested** through the VS Code UI, 2026-10-07: opening the container, compose stack, end-to-end tests, minikube deployment, `az login`. Single runs. Terraform validation and the other Azure steps were reported done without captured output. |
 | Linux under WSL2, rootful Podman | Tested with a throwaway image and scripts, **not** through VS Code. |
 | **Native Linux** | **Not tested.** See [Linux](#linux-not-tested). |
-| **macOS** | **Not tested.** See [macOS](#macos-not-tested). |
+| **macOS** on Apple Silicon (arm64), Podman 6.1.3, applehv machine, rootful | **Partly tested**, 2026-10-09: image builds natively for arm64, container starts, compose stack up (nginx answers on 8080), `devcontainer-install-playwright`, e2e suite (one failure: "submitting a beer entry causes it to appear in history" navigates away before its POST completes, a race in the test and not platform-specific; it then passed 10 of 10 repeats). **Not yet run:** minikube, Azure, the VS Code UI. See [macOS](#macos-partly-tested). |
 
 Tested combination: VS Code 1.140.0, Dev Containers extension 0.469.0, Podman 6.0.2 on the host (Windows 11
 Enterprise 10.0.26200). Other versions may work; nobody has checked. The VS Code documentation says Podman 5 or
@@ -95,12 +95,38 @@ your host: a rootful Podman socket, or a wrapper script behind `dev.containers.d
 `sudo podman`. The extension setting is described as "an executable name or path", so a wrapper script is a legitimate value but the
 setting probably cannot carry arguments; neither point was tried.
 
-### macOS (not tested)
+### macOS (partly tested)
 
-> **TODO(macOS tester):** test the container on macOS and replace this section. No macOS checklist exists yet; the Windows checklists in `openspec/changes/archive/2026-10-07-add-podman-devcontainer/` are the template.
+> **TODO(macOS tester):** run the minikube deployment on macOS and record the results here.
 
-Podman on macOS always uses a machine. `podman machine set --rootful` is documented, but nothing here has been run
-on macOS.
+Tried on macOS 26.7.1, Apple Silicon, Podman 6.1.3 with the applehv provider. Intel Macs were not tried.
+
+1. Podman on macOS always uses a machine, and a machine created with `podman machine init` is **rootless**. Make
+   it rootful (rootful and rootless storage are separate, so images pulled before do not carry over):
+   ```
+   podman machine stop
+   podman machine set --rootful
+   podman machine start
+   podman info --format "{{.Host.Security.Rootless}}"   # must print false
+   ```
+   Afterwards the default connection is `podman-machine-default-root`; `podman system connection list` shows it.
+2. Give the machine enough memory. The default of 2 GiB is too small: `devcontainer-minikube-start` alone asks
+   for 4 GiB. 8 GiB was used here; no minimum was measured.
+   ```
+   podman machine stop && podman machine set --memory 8192 && podman machine start
+   ```
+3. The image builds natively for arm64 (the Dockerfile picks the download for `uname -m`). Do not build it for
+   x86_64 under emulation.
+
+Without VS Code, the [Dev Containers CLI](https://github.com/devcontainers/cli) uses the same `devcontainer.json`
+(it ignores the VS Code extensions and does not forward ports):
+```
+npx @devcontainers/cli up --workspace-folder . --docker-path podman
+npx @devcontainers/cli exec --workspace-folder . --docker-path podman bash
+```
+
+Run `podman compose` and the helper commands **inside** the container. The macOS host has no compose provider,
+and `podman compose` on the host fails with "looking up compose provider failed".
 
 ## Opening the container
 
@@ -225,7 +251,7 @@ your host files, including secrets, would be visible, and file access should be 
 
 ## Known gaps
 
-- Native Linux and macOS: untested (above).
+- Native Linux: untested. macOS: partly tested (above).
 - The repository-in-a-volume flow.
 - Helm: no dedicated VS Code extension is installed; the Kubernetes extension is, and whether it covers Helm charts was not checked.
 - `devcontainer.json` `runArgs` (`--shm-size=1g`) and the fonts fix were confirmed by the Windows run; 1 GB is the tested size, not a measured minimum.
