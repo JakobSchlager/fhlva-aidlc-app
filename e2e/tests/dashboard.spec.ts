@@ -19,7 +19,12 @@ test('submitting a beer entry causes it to appear in history', async ({ loggedIn
   await page.getByLabel(/beer name/i).fill(beerName);
   await page.getByLabel(/volume/i).fill('500');
   await page.getByLabel(/abv/i).fill('5');
+  // Wait for the entry to be saved: navigating while the POST is in flight aborts it
+  const saved = page.waitForResponse(
+    (r) => r.url().endsWith('/tracking/entries') && r.request().method() === 'POST',
+  );
   await page.getByRole('button', { name: /add|log|save|submit/i }).click();
+  expect((await saved).status()).toBe(201);
 
   // Navigate to history and verify the entry appears
   await page.goto('/history');

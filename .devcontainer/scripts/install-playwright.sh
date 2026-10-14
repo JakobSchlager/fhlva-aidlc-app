@@ -19,16 +19,25 @@ E2E="${E2E_DIR:-$PWD/e2e}"
 # visible after installing these two packages).
 dnf -y install alsa-lib at-spi2-atk at-spi2-core atk dbus-libs libX11 libXcomposite libXdamage \
                libXext libXfixes libXrandr libxcb mesa-libgbm nspr nss nss-util \
-               liberation-fonts dejavu-sans-fonts
+               liberation-fonts dejavu-sans-fonts \
+               cups-libs cairo pango
+# cups-libs, cairo and pango: not needed by the headless shell, but by the full Chromium that
+# `playwright install chromium` also downloads (ldd on aarch64, Playwright 1.62.1); without them Playwright
+# prints a "missing dependencies" warning.
 
 cd "$E2E"
 [ -d node_modules/@playwright/test ] || npm ci
 npx playwright install chromium
 
-BIN="$(find "${PLAYWRIGHT_BROWSERS_PATH:-$HOME/.cache/ms-playwright}" -name chrome-headless-shell -type f 2>/dev/null | head -1)"
-[ -n "$BIN" ] || { echo "devcontainer-install-playwright: browser binary not found after install" >&2; exit 1; }
-if missing="$(ldd "$BIN" 2>&1 | grep 'not found')"; then
-  echo "devcontainer-install-playwright: browser installed but libraries are still missing:" >&2
-  echo "$missing" >&2; exit 1
-fi
-echo "devcontainer-install-playwright: Chromium and its libraries are installed ($BIN)"
+# Check both binaries. The headless shell is chrome-headless-shell on x86_64 but headless_shell on aarch64.
+ROOT="${PLAYWRIGHT_BROWSERS_PATH:-$HOME/.cache/ms-playwright}"
+HEADLESS="$(find "$ROOT" \( -name chrome-headless-shell -o -name headless_shell \) -type f 2>/dev/null | head -1)"
+FULL="$(find "$ROOT" -path '*/chromium-*' -name chrome -type f 2>/dev/null | head -1)"
+[ -n "$HEADLESS" ] || { echo "devcontainer-install-playwright: browser binary not found after install" >&2; exit 1; }
+for BIN in "$HEADLESS" $FULL; do
+  if missing="$(ldd "$BIN" 2>&1 | grep 'not found')"; then
+    echo "devcontainer-install-playwright: browser installed but libraries are still missing for $BIN:" >&2
+    echo "$missing" >&2; exit 1
+  fi
+done
+echo "devcontainer-install-playwright: Chromium and its libraries are installed ($HEADLESS)"

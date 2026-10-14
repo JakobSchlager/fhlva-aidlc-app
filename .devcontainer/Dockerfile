@@ -12,9 +12,12 @@ USER root
 # Fedora 44 offers only JDK 25 and an early-access 27, so JDK 21 (required by the poms and used by the
 # service images, eclipse-temurin-21) comes from an Eclipse Temurin tarball. The checksum is from the
 # Adoptium API (api.adoptium.net), a different origin from the GitHub download.
+# The image builds for x86_64 (Windows, Linux) and aarch64 (Apple Silicon Macs). The architecture is taken
+# from `uname -m` in the build container, so it follows the engine's native or --platform architecture.
 ARG TEMURIN_RELEASE=jdk-21.0.12.1+1
-ARG TEMURIN_FILE=OpenJDK21U-jdk_x64_linux_hotspot_21.0.12.1_1.tar.gz
-ARG TEMURIN_SHA256=ce79869e1307ed8ee1e2baa86a412b1eb5b75d10a01006d788a6f968bcfaee94
+ARG TEMURIN_VERSION=21.0.12.1_1
+ARG TEMURIN_SHA256_X64=ce79869e1307ed8ee1e2baa86a412b1eb5b75d10a01006d788a6f968bcfaee94
+ARG TEMURIN_SHA256_AARCH64=23e37e026f12f3e706f18938ff611db3032d075b09d0879a25d06718c773e223
 ARG MAVEN_VERSION=3.9.16
 ARG NODE_VERSION=v20.20.2
 ARG TERRAFORM_VERSION=1.16.1
@@ -38,6 +41,13 @@ RUN dnf -y install \
 # Checksums come from the same origin as the artefacts: they catch corrupted downloads, not a
 # compromised release server.
 RUN set -eux; cd /tmp; \
+    # Vendor names for this architecture: Temurin/Node, and Go-style for Terraform.
+    case "$(uname -m)" in \
+      x86_64)  JDK_ARCH=x64;     NODE_ARCH=x64;   GO_ARCH=amd64; TEMURIN_SHA256="${TEMURIN_SHA256_X64}" ;; \
+      aarch64) JDK_ARCH=aarch64; NODE_ARCH=arm64; GO_ARCH=arm64; TEMURIN_SHA256="${TEMURIN_SHA256_AARCH64}" ;; \
+      *) echo "unsupported architecture: $(uname -m)" >&2; exit 1 ;; \
+    esac; \
+    TEMURIN_FILE="OpenJDK21U-jdk_${JDK_ARCH}_linux_hotspot_${TEMURIN_VERSION}.tar.gz"; \
     # JDK 21 (Eclipse Temurin)
     curl -fsSLO "https://github.com/adoptium/temurin21-binaries/releases/download/$(echo "${TEMURIN_RELEASE}" | sed 's/+/%2B/')/${TEMURIN_FILE}"; \
     echo "${TEMURIN_SHA256}  ${TEMURIN_FILE}" | sha256sum -c -; \
@@ -48,26 +58,27 @@ RUN set -eux; cd /tmp; \
     tar -xzf "apache-maven-${MAVEN_VERSION}-bin.tar.gz" -C /opt; \
     ln -s "/opt/apache-maven-${MAVEN_VERSION}/bin/mvn" /usr/local/bin/mvn; \
     # Node.js
-    curl -fsSLO "https://nodejs.org/dist/${NODE_VERSION}/node-${NODE_VERSION}-linux-x64.tar.xz"; \
-    curl -fsSL "https://nodejs.org/dist/${NODE_VERSION}/SHASUMS256.txt" | grep " node-${NODE_VERSION}-linux-x64.tar.xz\$" | sha256sum -c -; \
-    tar -xJf "node-${NODE_VERSION}-linux-x64.tar.xz" -C /usr/local --strip-components=1 --no-same-owner; \
+    curl -fsSLO "https://nodejs.org/dist/${NODE_VERSION}/node-${NODE_VERSION}-linux-${NODE_ARCH}.tar.xz"; \
+    curl -fsSL "https://nodejs.org/dist/${NODE_VERSION}/SHASUMS256.txt" | grep " node-${NODE_VERSION}-linux-${NODE_ARCH}.tar.xz\$" | sha256sum -c -; \
+    tar -xJf "node-${NODE_VERSION}-linux-${NODE_ARCH}.tar.xz" -C /usr/local --strip-components=1 --no-same-owner; \
     # Terraform
-    curl -fsSLO "https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}/terraform_${TERRAFORM_VERSION}_linux_amd64.zip"; \
-    curl -fsSL "https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}/terraform_${TERRAFORM_VERSION}_SHA256SUMS" | grep "terraform_${TERRAFORM_VERSION}_linux_amd64.zip\$" | sha256sum -c -; \
-    unzip -q "terraform_${TERRAFORM_VERSION}_linux_amd64.zip" terraform -d /usr/local/bin; \
+    curl -fsSLO "https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}/terraform_${TERRAFORM_VERSION}_linux_${GO_ARCH}.zip"; \
+    curl -fsSL "https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}/terraform_${TERRAFORM_VERSION}_SHA256SUMS" | grep "terraform_${TERRAFORM_VERSION}_linux_${GO_ARCH}.zip\$" | sha256sum -c -; \
+    unzip -q "terraform_${TERRAFORM_VERSION}_linux_${GO_ARCH}.zip" terraform -d /usr/local/bin; \
     rm -f /tmp/*.tar.gz /tmp/*.tar.xz /tmp/*.zip
 
 ENV JAVA_HOME=/opt/jdk-21
 ENV PATH="${JAVA_HOME}/bin:${PATH}"
 
 RUN set -eux; \
-    curl -fsSL -o /usr/local/bin/minikube "https://github.com/kubernetes/minikube/releases/download/${MINIKUBE_VERSION}/minikube-linux-amd64"; \
-    echo "$(curl -fsSL "https://github.com/kubernetes/minikube/releases/download/${MINIKUBE_VERSION}/minikube-linux-amd64.sha256" | awk '{print $1}')  /usr/local/bin/minikube" | sha256sum -c -; \
-    curl -fsSL -o /usr/local/bin/kubectl "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl"; \
-    echo "$(curl -fsSL "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl.sha256" | awk '{print $1}')  /usr/local/bin/kubectl" | sha256sum -c -; \
-    curl -fsSL -o /tmp/helm.tgz "https://get.helm.sh/helm-${HELM_VERSION}-linux-amd64.tar.gz"; \
-    echo "$(curl -fsSL "https://get.helm.sh/helm-${HELM_VERSION}-linux-amd64.tar.gz.sha256sum" | awk '{print $1}')  /tmp/helm.tgz" | sha256sum -c -; \
-    tar -xzf /tmp/helm.tgz -C /tmp; mv /tmp/linux-amd64/helm /usr/local/bin/helm; rm -rf /tmp/helm.tgz /tmp/linux-amd64; \
+    case "$(uname -m)" in x86_64) GO_ARCH=amd64 ;; aarch64) GO_ARCH=arm64 ;; *) exit 1 ;; esac; \
+    curl -fsSL -o /usr/local/bin/minikube "https://github.com/kubernetes/minikube/releases/download/${MINIKUBE_VERSION}/minikube-linux-${GO_ARCH}"; \
+    echo "$(curl -fsSL "https://github.com/kubernetes/minikube/releases/download/${MINIKUBE_VERSION}/minikube-linux-${GO_ARCH}.sha256" | awk '{print $1}')  /usr/local/bin/minikube" | sha256sum -c -; \
+    curl -fsSL -o /usr/local/bin/kubectl "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/${GO_ARCH}/kubectl"; \
+    echo "$(curl -fsSL "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/${GO_ARCH}/kubectl.sha256" | awk '{print $1}')  /usr/local/bin/kubectl" | sha256sum -c -; \
+    curl -fsSL -o /tmp/helm.tgz "https://get.helm.sh/helm-${HELM_VERSION}-linux-${GO_ARCH}.tar.gz"; \
+    echo "$(curl -fsSL "https://get.helm.sh/helm-${HELM_VERSION}-linux-${GO_ARCH}.tar.gz.sha256sum" | awk '{print $1}')  /tmp/helm.tgz" | sha256sum -c -; \
+    tar -xzf /tmp/helm.tgz -C /tmp; mv /tmp/linux-${GO_ARCH}/helm /usr/local/bin/helm; rm -rf /tmp/helm.tgz /tmp/linux-${GO_ARCH}; \
     chmod +x /usr/local/bin/minikube /usr/local/bin/kubectl /usr/local/bin/helm
 
 # Azure CLI from Microsoft's RPM repository (the RHEL 9 repository definition; Fedora compatibility

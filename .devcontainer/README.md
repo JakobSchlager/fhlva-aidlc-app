@@ -14,7 +14,7 @@ Design and evidence: [`openspec/changes/archive/2026-10-07-add-podman-devcontain
 | **Windows 11** with Podman Desktop (WSL machine, rootful), VS Code | **Tested** through the VS Code UI, 2026-10-07: opening the container, compose stack, end-to-end tests, minikube deployment, `az login`. Single runs. Terraform validation and the other Azure steps were reported done without captured output. |
 | Linux under WSL2, rootful Podman | Tested with a throwaway image and scripts, **not** through VS Code. |
 | **Native Linux** | **Not tested.** See [Linux](#linux-not-tested). |
-| **macOS** | **Not tested.** See [macOS](#macos-not-tested). |
+| **macOS** on Apple Silicon (arm64), Podman 6.1.3, applehv machine, rootful | **Partly tested**, 2026-10-09, single runs: image builds natively for arm64, container starts, compose stack, `devcontainer-install-playwright`, e2e suite against compose (1 failure), minikube deployment (`devcontainer-minikube-start` 1 min 42 s including downloads, `deploy-minikube.sh` 8 min), e2e suite against minikube through the port-forward (16 passed, 1 skipped, 2 failed). All three failures were races in the tests, not platform-specific: "submitting a beer entry causes it to appear in history" navigated away before its POST completed, and "delete entry removes the row" counted the rows before they had loaded. Both are fixed; afterwards `dashboard.spec.ts` and `history.spec.ts` passed 5 of 5 repeats against minikube. **Not yet run:** Azure, the VS Code UI. See [macOS](#macos-partly-tested). |
 
 Tested combination: VS Code 1.140.0, Dev Containers extension 0.469.0, Podman 6.0.2 on the host (Windows 11
 Enterprise 10.0.26200). Other versions may work; nobody has checked. The VS Code documentation says Podman 5 or
@@ -96,12 +96,38 @@ your host: a rootful Podman socket, or a wrapper script behind `dev.containers.d
 `sudo podman`. The extension setting is described as "an executable name or path", so a wrapper script is a legitimate value but the
 setting probably cannot carry arguments; neither point was tried.
 
-### macOS (not tested)
+### macOS (partly tested)
 
-> **TODO(macOS tester):** test the container on macOS and replace this section. No macOS checklist exists yet; the Windows checklists in `openspec/changes/archive/2026-10-07-add-podman-devcontainer/` are the template.
+> **TODO(macOS tester):** try Azure and the VS Code UI on macOS and record the results here.
 
-Podman on macOS always uses a machine. `podman machine set --rootful` is documented, but nothing here has been run
-on macOS.
+Tried on macOS 26.7.1, Apple Silicon, Podman 6.1.3 with the applehv provider. Intel Macs were not tried.
+
+1. Podman on macOS always uses a machine, and a machine created with `podman machine init` is **rootless**. Make
+   it rootful (rootful and rootless storage are separate, so images pulled before do not carry over):
+   ```
+   podman machine stop
+   podman machine set --rootful
+   podman machine start
+   podman info --format "{{.Host.Security.Rootless}}"   # must print false
+   ```
+   Afterwards the default connection is `podman-machine-default-root`; `podman system connection list` shows it.
+2. Give the machine enough memory. The default of 2 GiB is too small: `devcontainer-minikube-start` alone asks
+   for 4 GiB. 8 GiB was used here; no minimum was measured.
+   ```
+   podman machine stop && podman machine set --memory 8192 && podman machine start
+   ```
+3. The image builds natively for arm64 (the Dockerfile picks the download for `uname -m`). Do not build it for
+   x86_64 under emulation.
+
+Without VS Code, the [Dev Containers CLI](https://github.com/devcontainers/cli) uses the same `devcontainer.json`
+(it ignores the VS Code extensions and does not forward ports):
+```
+npx @devcontainers/cli up --workspace-folder . --docker-path podman
+npx @devcontainers/cli exec --workspace-folder . --docker-path podman bash
+```
+
+Run `podman compose` and the helper commands **inside** the container. The macOS host has no compose provider,
+and `podman compose` on the host fails with "looking up compose provider failed".
 
 ## Opening the container
 
@@ -145,8 +171,9 @@ devcontainer-install-playwright          # once; about 40 s on a Linux host, saf
 cd e2e && npm run test:e2e
 ```
 `npx playwright install --with-deps` does **not** work here (it uses `apt-get`; the image is Fedora). On
-Windows the suite gave 18 passed and 1 skipped. One test skips itself, either because the history date-filter
-inputs were not found or because no notification warning appeared within 6 minutes; which one was not recorded.
+Windows the suite gave 18 passed and 1 skipped. One test skips itself: "date-range filter with future dates shows no
+results" (seen on macOS, 5 of 5 runs), because the From/To `<label>`s in `frontend/src/pages/HistoryPage.tsx` are
+not associated with their inputs, so `getByLabel` finds nothing. Which test skipped on Windows was not recorded.
 
 **minikube.** Stop the compose stack first (both use port 8080 and a lot of memory), then:
 ```
@@ -212,6 +239,7 @@ execution as the user running the API".
 | `cat /proc/self/cgroup` prints `0::/`, or minikube fails with `open memory.max ... No such file` | The cgroup setup did not run. Run `devcontainer-cgroup-init` and open a new terminal. |
 | VS Code loses the connection after a `podman restart` | Reload the window. |
 | `unsupported UNC path` when the container starts | Set `dev.containers.mountWaylandSocket` to `false`. |
+| On minikube, about 2 in 5 requests through the ingress hang; ingress-nginx logs `pthread_create() failed (11: Resource temporarily unavailable)` and `worker process ... cannot be respawned` | The minikube node was created with Podman's default pids limit, so every pod container is capped at 307 threads, and ingress-nginx exceeds that on a config reload when the machine has several CPUs (5 on the Mac where this was seen). `.devcontainer/containers.conf` sets `pids_limit = 0`; in an older container, rebuild it, then `minikube delete` and `devcontainer-minikube-start`. Check with `minikube ssh -- systemctl show --property DefaultTasksMax` (307 is the bad value). |
 | `podman compose up -d` hangs, or the Spring services stay `Created` | Podman is not running the health checks. `devcontainer-healthcheck-runner status`; start it with `devcontainer-healthcheck-runner start`; read the log. |
 | `git`: "detected dubious ownership" | `git config --global --add safe.directory "$PWD"` (the first-creation step normally does this). |
 | e2e tests fail with text "hidden" and screenshots without text | Fonts are missing. Run `devcontainer-install-playwright` again. |
@@ -230,7 +258,7 @@ your host files, including secrets, would be visible, and file access should be 
 
 ## Known gaps
 
-- Native Linux and macOS: untested (above).
+- Native Linux: untested. macOS: partly tested (above).
 - The repository-in-a-volume flow.
 - Helm: no dedicated VS Code extension is installed; the Kubernetes extension is, and whether it covers Helm charts was not checked.
 - `devcontainer.json` `runArgs` (`--shm-size=1g`) and the fonts fix were confirmed by the Windows run; 1 GB is the tested size, not a measured minimum.
