@@ -193,6 +193,12 @@ Deploys the Helm umbrella chart to a local minikube cluster. Useful for validati
    ```bash
    minikube start
    ```
+   When running in a devcontainer use instead:
+   ```bash
+   devcontainer-minikube-start
+   ``` 
+   see also [development container](.devcontainer/README.md) documentation
+
 
 2. Create `.env` from `.env.example` if you have not already:
 

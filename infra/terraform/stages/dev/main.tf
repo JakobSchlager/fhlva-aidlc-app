@@ -5,16 +5,24 @@ locals {
   environment  = "dev"
   location     = "germanywestcentral"
 
+  # initially defined to ACONET network ranges
   ingress_allowed_ips = [
-    "0.0.0.0/0",
+    "78.104.0.0/16",
+    "185.154.40.0/22",
+    "193.170.0.0/15",
   ]
 
+  # initially defined to ACONET network ranges
   api_server_authorized_ips = [
-    "0.0.0.0/0",
+    "78.104.0.0/16",
+    "185.154.40.0/22",
+    "193.170.0.0/15",
   ]
 
+  # TODO: change to valid email address
   alert_email_address = "platform@example.com"
 
+  # TODO: enter object user ids
   # Entra ID object IDs of the users who may administer the AKS cluster with kubectl
   # (role: Azure Kubernetes Service RBAC Cluster Admin). Find yours with:
   #   az ad signed-in-user show --query id -o tsv
