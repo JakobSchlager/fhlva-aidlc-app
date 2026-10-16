@@ -24,6 +24,7 @@ The same RSA key file is used in all three scenarios; only the delivery mechanis
 |---|---|
 | **Podman Compose / Docker Compose** | `secrets/auth-rs256-private-key.pem` is bind-mounted read-only into the `auth-service` container at `/run/secrets/auth-private-key`. |
 | **minikube** | `scripts/deploy-minikube.sh` reads the key from `.env` (`AUTH_RSA_KEY_PATH`) and stores it in a Kubernetes Secret via `kubectl create secret generic`. The pod consumes it via `secretKeyRef`. |
+| **Rancher Desktop** | `scripts/deploy-rancher-desktop.sh` reads the key from `.env` (`AUTH_RSA_KEY_PATH`) and stores it in the `beer-tracker-secrets` Kubernetes Secret. |
 | **Azure AKS** | `scripts/deploy-azure.sh` reads the key from `AUTH_RSA_KEY_PATH` and stores it in a Kubernetes Secret (`beer-tracker-secrets`). The pod consumes it via a volume mount at `/etc/secrets/`. |
 
 ## Important
@@ -31,4 +32,4 @@ The same RSA key file is used in all three scenarios; only the delivery mechanis
 - **Never commit actual key files.** This directory is gitignored except for this README.
 - The `.pem` and `.key` files in this directory are excluded by `.gitignore`.
 - Do not use production keys for local development.
-- For minikube and Azure, the key path is controlled by the `AUTH_RSA_KEY_PATH` variable in `.env`.
+- For minikube, Rancher Desktop, and Azure, the key path is controlled by the `AUTH_RSA_KEY_PATH` variable in `.env`.
