@@ -130,6 +130,7 @@ Runs the full stack on your laptop. nginx listens on `localhost:8080`.
 
 - **Podman ≥ 4** + **Podman Compose ≥ 1.0**, **or** Docker + Docker Compose v2 (`docker compose` subcommand)
 - `openssl` available on `$PATH`
+- **WSL version >= 2.7.5** ([nftables issue](https://github.com/podman-container-tools/podman/issues/25201)): You can use ```wsl --update``` to update wsl.
 
 ### Setup
 
