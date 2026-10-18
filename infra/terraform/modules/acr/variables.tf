@@ -22,3 +22,9 @@ variable "tags" {
   type        = map(string)
   description = "Tags to apply to all resources."
 }
+
+variable "sku" {
+  type        = string
+  description = "The SKU name of the container registry (Basic, Standard, Premium)."
+  default     = "Basic"
+}

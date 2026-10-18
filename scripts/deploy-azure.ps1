@@ -170,6 +170,9 @@ $StorageContainer = if ($Config["AZURE_STORAGE_CONTAINER"]) { $Config["AZURE_STO
 $AksVmSize = if ($Config["AKS_VM_SIZE"]) { $Config["AKS_VM_SIZE"] } else { "Standard_D2s_v3" }
 $AksMinCount = if ($Config["AKS_NODE_MIN_COUNT"]) { [int]$Config["AKS_NODE_MIN_COUNT"] } else { 2 }
 $AksMaxCount = if ($Config["AKS_NODE_MAX_COUNT"]) { [int]$Config["AKS_NODE_MAX_COUNT"] } else { 2 }
+$AcrSku = if ($Config["ACR_SKU"]) { $Config["ACR_SKU"] } else { "Basic" }
+$AppGwMinCapacity = if ($Config["APPGW_MIN_CAPACITY"]) { [int]$Config["APPGW_MIN_CAPACITY"] } else { 0 }
+$AppGwMaxCapacity = if ($Config["APPGW_MAX_CAPACITY"]) { [int]$Config["APPGW_MAX_CAPACITY"] } else { 2 }
 
 $AuthRsaKeyPath = if ($Config["AUTH_RSA_KEY_PATH"]) { $Config["AUTH_RSA_KEY_PATH"] } else { "secrets/auth-rs256-private-key.pem" }
 $AlertEmail = if ($Config["ALERT_EMAIL_ADDRESS"]) { $Config["ALERT_EMAIL_ADDRESS"] } else { "platform@example.com" }
@@ -529,6 +532,9 @@ $AutoTfVars = @{
     aks_vm_size                  = $AksVmSize
     aks_min_count                = $AksMinCount
     aks_max_count                = $AksMaxCount
+    acr_sku                      = $AcrSku
+    appgw_min_capacity           = $AppGwMinCapacity
+    appgw_max_capacity           = $AppGwMaxCapacity
 }
 $AutoTfVarsJson = $AutoTfVars | ConvertTo-Json -Depth 5
 $AutoTfVarsPath = Join-Path $TfDir "dev.auto.tfvars.json"
@@ -672,7 +678,9 @@ Write-Header -Text "Deployment Complete!"
 Write-Host "Application Status:" -ForegroundColor Green
 Write-Host "  Resource Group:   $ResourceGroup"
 Write-Host "  Storage Account:  $StorageAccount ($TfStateRg)"
+Write-Host "  ACR SKU:          $AcrSku"
 Write-Host "  AKS Node Pool:    $AksVmSize ($AksMinCount nodes)"
+Write-Host "  App Gateway Cap:  min=$AppGwMinCapacity, max=$AppGwMaxCapacity"
 if ($EnableDynatrace) {
     Write-Host "  Dynatrace:        Enabled (OneAgent injected in namespace 'beer-tracker')" -ForegroundColor Green
 }

@@ -37,6 +37,8 @@ module "network" {
   location            = local.location
   tags                = local.tags
   ingress_allowed_ips = local.ingress_allowed_ips
+  min_capacity        = var.appgw_min_capacity
+  max_capacity        = var.appgw_max_capacity
 }
 
 module "aks" {
@@ -63,6 +65,7 @@ module "acr" {
   location            = local.location
   resource_group_name = data.azurerm_resource_group.main.name
   tags                = local.tags
+  sku                 = var.acr_sku
 }
 
 resource "azurerm_role_assignment" "agic_appgw_contributor" {

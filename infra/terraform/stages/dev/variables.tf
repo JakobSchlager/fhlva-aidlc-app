@@ -37,7 +37,7 @@ variable "aks_cluster_admin_object_ids" {
 variable "ingress_allowed_ips" {
   type        = list(string)
   description = "CIDR ranges allowed to access Application Gateway ingress."
-  default     = [
+  default = [
     "78.104.0.0/16",
     "185.154.40.0/22",
     "193.170.0.0/15"
@@ -47,7 +47,7 @@ variable "ingress_allowed_ips" {
 variable "api_server_authorized_ips" {
   type        = list(string)
   description = "CIDR ranges allowed to access the AKS API server."
-  default     = [
+  default = [
     "78.104.0.0/16",
     "185.154.40.0/22",
     "193.170.0.0/15"
@@ -69,5 +69,23 @@ variable "aks_min_count" {
 variable "aks_max_count" {
   type        = number
   description = "Maximum node count for AKS default system node pool."
+  default     = 2
+}
+
+variable "acr_sku" {
+  type        = string
+  description = "SKU for Azure Container Registry (Basic, Standard, Premium)."
+  default     = "Basic"
+}
+
+variable "appgw_min_capacity" {
+  type        = number
+  description = "Minimum capacity for Application Gateway autoscaling."
+  default     = 0
+}
+
+variable "appgw_max_capacity" {
+  type        = number
+  description = "Maximum capacity for Application Gateway autoscaling."
   default     = 2
 }
