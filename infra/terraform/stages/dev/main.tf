@@ -1,32 +1,15 @@
 locals {
-  subscription_id = "FILL_IN_STAGING_SUBSCRIPTION_ID"
+  subscription_id = var.subscription_id != null && var.subscription_id != "" ? var.subscription_id : "FILL_IN_STAGING_SUBSCRIPTION_ID"
 
-  project_name = "fhooe-aidlc"
-  environment  = "dev"
-  location     = "germanywestcentral"
+  project_name = var.project_name
+  environment  = var.environment
+  location     = var.location
 
-  # initially defined to ACONET network ranges
-  ingress_allowed_ips = [
-    "78.104.0.0/16",
-    "185.154.40.0/22",
-    "193.170.0.0/15",
-  ]
+  ingress_allowed_ips       = var.ingress_allowed_ips
+  api_server_authorized_ips = var.api_server_authorized_ips
 
-  # initially defined to ACONET network ranges
-  api_server_authorized_ips = [
-    "78.104.0.0/16",
-    "185.154.40.0/22",
-    "193.170.0.0/15",
-  ]
-
-  # TODO: change to valid email address
-  alert_email_address = "platform@example.com"
-
-  # TODO: enter object user ids
-  # Entra ID object IDs of the users who may administer the AKS cluster with kubectl
-  # (role: Azure Kubernetes Service RBAC Cluster Admin). Find yours with:
-  #   az ad signed-in-user show --query id -o tsv
-  aks_cluster_admin_object_ids = []
+  alert_email_address          = var.alert_email_address
+  aks_cluster_admin_object_ids = var.aks_cluster_admin_object_ids
 
   tags = {
     project     = local.project_name
@@ -67,6 +50,9 @@ module "aks" {
   app_gw_id                  = module.network.app_gw_id
   log_analytics_workspace_id = data.azurerm_log_analytics_workspace.main.id
   api_server_authorized_ips  = local.api_server_authorized_ips
+  vm_size                    = var.aks_vm_size
+  min_count                  = var.aks_min_count
+  max_count                  = var.aks_max_count
 }
 
 module "acr" {

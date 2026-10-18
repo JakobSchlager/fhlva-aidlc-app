@@ -37,3 +37,21 @@ variable "api_server_authorized_ips" {
   type        = list(string)
   description = "CIDRs allowed to reach the AKS API server."
 }
+
+variable "vm_size" {
+  type        = string
+  description = "VM size for the default node pool."
+  default     = "Standard_D2s_v3"
+}
+
+variable "min_count" {
+  type        = number
+  description = "Minimum node count for the default node pool."
+  default     = 2
+}
+
+variable "max_count" {
+  type        = number
+  description = "Maximum node count for the default node pool."
+  default     = 2
+}
