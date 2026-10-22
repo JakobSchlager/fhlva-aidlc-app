@@ -6,8 +6,8 @@ It also provides internal endpoints for other services, such as the health-notif
 Architecturally, it is a layered application consisting of a controller layer (handling HTTP requests), a service layer (containing business logic, including calculating standard drinks), and a repository layer (interacting with the database).
 
 # What did we manage to do during the lab?
-Jakob Schlager: Completed the local deployment with Podman Compose and deployed the application to Minikube.
-Pascal Stadler: Completed the local deployment with docker compose (rancher desktop) and deployed the application to the local rancher desktop Kubernetes cluster. (Added a script to simplify the deployment process.) Added monitoring to local kubernetes cluster with dynatrace. Started deployment to azure (not completed). Completed azure deployment with new scripts and adapted terraform. Also added dynatrace monitoring.
+Jakob Schlager and Stefan Kastenhofer: Completed the local deployment with Podman Compose and deployed the application to Minikube.
+Pascal Stadler: Completed the local deployment with docker compose (rancher desktop) and deployed the application to the local rancher desktop Kubernetes cluster. (Added a script to simplify the deployment process.) Added monitoring to local kubernetes cluster with dynatrace. Started deployment to azure (not completed). Completed azure deployment with new scripts and adapted terraform. Also added dynatrace monitoring. 
 
 
 # Which issues did we encounter?
