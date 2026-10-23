@@ -1,9 +1,9 @@
 locals {
-  subscription_id = "FILL_IN_STAGING_SUBSCRIPTION_ID"
+  subscription_id = "34cf92aa-0a2f-47dc-a8ac-d96a5aa5256d"
 
   project_name = "fhooe-aidlc"
   environment  = "dev"
-  location     = "germanywestcentral"
+  location     = "polandcentral"
 
   # initially defined to ACONET network ranges
   ingress_allowed_ips = [
@@ -26,7 +26,7 @@ locals {
   # Entra ID object IDs of the users who may administer the AKS cluster with kubectl
   # (role: Azure Kubernetes Service RBAC Cluster Admin). Find yours with:
   #   az ad signed-in-user show --query id -o tsv
-  aks_cluster_admin_object_ids = []
+  aks_cluster_admin_object_ids = ["35ba35a9-8ce0-4765-b176-776630a58d63"]
 
   tags = {
     project     = local.project_name
