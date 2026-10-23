@@ -89,3 +89,22 @@ variable "appgw_max_capacity" {
   description = "Maximum capacity for Application Gateway autoscaling."
   default     = 2
 }
+
+variable "custom_suffix" {
+  type        = string
+  description = "Custom suffix to ensure globally unique resource names (e.g. user initials or alias)."
+  default     = ""
+}
+
+variable "acr_name" {
+  type        = string
+  description = "Explicit name for Azure Container Registry (must be globally unique, 5-50 alphanumeric characters). If omitted, generated from project_name, environment, and custom_suffix."
+  default     = null
+}
+
+variable "dns_prefix" {
+  type        = string
+  description = "Explicit DNS prefix for AKS cluster. If omitted, generated from project_name, environment, and custom_suffix."
+  default     = null
+}
+

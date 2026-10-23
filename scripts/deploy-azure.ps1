@@ -242,6 +242,8 @@ $AksMaxCount = if ($Config["AKS_NODE_MAX_COUNT"]) { [int]$Config["AKS_NODE_MAX_C
 $AcrSku = if ($Config["ACR_SKU"]) { $Config["ACR_SKU"] } else { "Basic" }
 $AppGwMinCapacity = if ($Config["APPGW_MIN_CAPACITY"]) { [int]$Config["APPGW_MIN_CAPACITY"] } else { 0 }
 $AppGwMaxCapacity = if ($Config["APPGW_MAX_CAPACITY"]) { [int]$Config["APPGW_MAX_CAPACITY"] } else { 2 }
+$CustomSuffix = if ($Config["AZURE_CUSTOM_SUFFIX"]) { $Config["AZURE_CUSTOM_SUFFIX"] } else { "" }
+$ConfigAcrName = if ($Config["AZURE_ACR_NAME"]) { $Config["AZURE_ACR_NAME"] } else { "" }
 
 $AuthRsaKeyPath = if ($Config["AUTH_RSA_KEY_PATH"]) { $Config["AUTH_RSA_KEY_PATH"] } else { "secrets/auth-rs256-private-key.pem" }
 $AlertEmail = if ($Config["ALERT_EMAIL_ADDRESS"]) { $Config["ALERT_EMAIL_ADDRESS"] } else { "platform@example.com" }
@@ -252,9 +254,24 @@ $StorageAccount = $Config["AZURE_STORAGE_ACCOUNT"]
 if (-not $StorageAccount) {
     # Generate unique 3-24 char alphanumeric name
     $cleanPrefix = ($ProjectName -replace '[^a-zA-Z0-9]', '').ToLower()
-    if ($cleanPrefix.Length -gt 14) { $cleanPrefix = $cleanPrefix.Substring(0, 14) }
-    $rndSuffix = (-join ((48..57) + (97..122) | Get-Random -Count 6 | ForEach-Object { [char]$_ }))
-    $StorageAccount = "${cleanPrefix}st${rndSuffix}"
+    $cleanSuffix = ($CustomSuffix -replace '[^a-zA-Z0-9]', '').ToLower()
+    if ($cleanSuffix) {
+        $maxPrefixLen = 22 - $cleanSuffix.Length
+        if ($cleanPrefix.Length -gt $maxPrefixLen) { $cleanPrefix = $cleanPrefix.Substring(0, $maxPrefixLen) }
+        $StorageAccount = "${cleanPrefix}st${cleanSuffix}"
+    } else {
+        if ($cleanPrefix.Length -gt 14) { $cleanPrefix = $cleanPrefix.Substring(0, 14) }
+        $rndSuffix = (-join ((48..57) + (97..122) | Get-Random -Count 6 | ForEach-Object { [char]$_ }))
+        $StorageAccount = "${cleanPrefix}st${rndSuffix}"
+    }
+}
+
+# ACR name resolution (must be 5-50 lowercase alphanumeric characters)
+if ($ConfigAcrName) {
+    $AcrName = ($ConfigAcrName -replace '[^a-zA-Z0-9]', '').ToLower()
+} else {
+    $cleanCustomSuffix = ($CustomSuffix -replace '[^a-zA-Z0-9]', '').ToLower()
+    $AcrName = ($ProjectName + $Environment + "acr" + $cleanCustomSuffix -replace '[^a-zA-Z0-9]', '').ToLower()
 }
 
 # --- STEP 0: Preflight Validation and Region Capacity Check ------------------
@@ -487,19 +504,18 @@ if (-not $storageCheck.nameAvailable -and $storageCheck.reason -eq "AlreadyExist
     # Check if we already own it in our subscription
     $existingSt = (az storage account list --query "[?name=='$StorageAccount'].id" -o tsv 2>$null)
     if (-not $existingSt) {
-        throw "Storage account '$StorageAccount' is already taken globally across Azure. Update AZURE_STORAGE_ACCOUNT in .env.azure."
+        throw "Storage account '$StorageAccount' is already taken globally across Azure. Update AZURE_STORAGE_ACCOUNT or AZURE_CUSTOM_SUFFIX in .env.azure."
     }
     Write-Info -Text "Storage account '$StorageAccount' already exists in subscription (reusing)."
 } else {
     Write-Success -Text "Storage account name '$StorageAccount' is available."
 }
 
-$AcrName = ($ProjectName + $Environment + "acr" -replace '-', '').ToLower()
 $acrCheck = (az acr check-name --name $AcrName -o json 2>$null) | ConvertFrom-Json
 if (-not $acrCheck.nameAvailable -and $acrCheck.reason -eq "AlreadyExists") {
     $existingAcr = (az acr list --query "[?name=='$AcrName'].id" -o tsv 2>$null)
     if (-not $existingAcr) {
-        throw "Container Registry '$AcrName' is already taken globally across Azure. Change AZURE_PROJECT_NAME in .env.azure."
+        throw "Container Registry '$AcrName' is already taken globally across Azure. Change AZURE_CUSTOM_SUFFIX or AZURE_ACR_NAME in .env.azure."
     }
     Write-Info -Text "ACR '$AcrName' already exists in subscription (reusing)."
 } else {
@@ -613,6 +629,8 @@ $AutoTfVars = @{
     project_name                 = $ProjectName
     environment                  = $Environment
     location                     = $Location
+    custom_suffix                = $CustomSuffix
+    acr_name                     = $AcrName
     alert_email_address          = $AlertEmail
     aks_cluster_admin_object_ids = @($SignedInUserId)
     ingress_allowed_ips          = $AllowedIps

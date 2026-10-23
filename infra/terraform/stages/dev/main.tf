@@ -55,6 +55,8 @@ module "aks" {
   vm_size                    = var.aks_vm_size
   min_count                  = var.aks_min_count
   max_count                  = var.aks_max_count
+  dns_prefix                 = var.dns_prefix
+  custom_suffix              = var.custom_suffix
 }
 
 module "acr" {
@@ -66,6 +68,8 @@ module "acr" {
   resource_group_name = data.azurerm_resource_group.main.name
   tags                = local.tags
   sku                 = var.acr_sku
+  acr_name            = var.acr_name
+  custom_suffix       = var.custom_suffix
 }
 
 resource "azurerm_role_assignment" "agic_appgw_contributor" {

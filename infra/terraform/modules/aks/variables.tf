@@ -55,3 +55,16 @@ variable "max_count" {
   description = "Maximum node count for the default node pool."
   default     = 2
 }
+
+variable "custom_suffix" {
+  type        = string
+  description = "Optional custom suffix to ensure regional uniqueness of the AKS cluster DNS prefix."
+  default     = ""
+}
+
+variable "dns_prefix" {
+  type        = string
+  description = "Optional explicit DNS prefix for the AKS cluster. If omitted, computed from project_name, environment, and custom_suffix."
+  default     = null
+}
+
