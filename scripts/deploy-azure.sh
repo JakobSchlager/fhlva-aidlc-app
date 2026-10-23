@@ -49,12 +49,12 @@ if [[ ! -f "$AUTH_RSA_KEY_PATH" ]]; then
   exit 1
 fi
 
-GIT_SHA=$(git -C "$REPO_ROOT" rev-parse --short HEAD)
+GIT_SHA=$(git -C "$REPO_ROOT" rev-parse --short HEAD | tr -d '\r')
 
 # --- Read infrastructure outputs from Terraform ------------------------------
 echo "Reading Terraform outputs from $TF_DIR..."
-ACR_LOGIN_SERVER=$(terraform -chdir="$TF_DIR" output -raw acr_login_server)
-AKS_CLUSTER_NAME=$(terraform -chdir="$TF_DIR" output -raw aks_cluster_name)
+ACR_LOGIN_SERVER=$(terraform -chdir="$TF_DIR" output -raw acr_login_server | tr -d '\r')
+AKS_CLUSTER_NAME=$(terraform -chdir="$TF_DIR" output -raw aks_cluster_name | tr -d '\r')
 
 echo "Terraform outputs:"
 echo "  ACR: $ACR_LOGIN_SERVER"
@@ -67,7 +67,7 @@ if [[ -n "${GH_SP_OBJECT_ID:-}" ]]; then
   AKS_RESOURCE_ID=$(az aks show \
     --resource-group "$AZURE_RESOURCE_GROUP" \
     --name "$AKS_CLUSTER_NAME" \
-    --query id -o tsv)
+    --query id -o tsv | tr -d '\r')
   az role assignment create \
     --assignee-object-id "$GH_SP_OBJECT_ID" \
     --assignee-principal-type ServicePrincipal \
@@ -80,7 +80,7 @@ fi
 echo "Logging in to ACR..."
 ACR_NAME="${ACR_LOGIN_SERVER%%.*}"
 # Use --expose-token so login works with both Docker and Podman
-ACR_TOKEN=$(az acr login --name "$ACR_NAME" --expose-token --output tsv --query accessToken)
+ACR_TOKEN=$(az acr login --name "$ACR_NAME" --expose-token --output tsv --query accessToken | tr -d '\r')
 docker login "$ACR_LOGIN_SERVER" --username 00000000-0000-0000-0000-000000000000 --password "$ACR_TOKEN"
 
 echo "Building and pushing images (tag: $GIT_SHA)..."
@@ -105,6 +105,7 @@ az aks get-credentials \
   --resource-group "$AZURE_RESOURCE_GROUP" \
   --name "$AKS_CLUSTER_NAME" \
   --overwrite-existing
+kubelogin convert-kubeconfig -l azurecli 2>/dev/null || true
 
 # --- Install Bitnami PostgreSQL (idempotent) ---------------------------------
 echo "Setting up PostgreSQL..."

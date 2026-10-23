@@ -9,18 +9,39 @@ ingress:
     enabled: false
 
 auth-service:
+  resources:
+    requests:
+      cpu: 100m
+      memory: 384Mi
+    limits:
+      cpu: 500m
+      memory: 768Mi
   env:
     SPRING_DATASOURCE_URL: "jdbc:postgresql://postgresql:5432/auth_db"
     SPRING_DATASOURCE_USERNAME: "postgres"
     AUTH_PRIVATE_KEY_PATH: "/etc/secrets/auth-rs256-private-key"
 
 beer-tracking-service:
+  resources:
+    requests:
+      cpu: 100m
+      memory: 384Mi
+    limits:
+      cpu: 500m
+      memory: 768Mi
   env:
     SPRING_DATASOURCE_URL: "jdbc:postgresql://postgresql:5432/tracking_db"
     SPRING_DATASOURCE_USERNAME: "postgres"
     JWKS_URI: "http://beer-tracker-auth-service:8081/auth/.well-known/jwks.json"
 
 health-notification-service:
+  resources:
+    requests:
+      cpu: 100m
+      memory: 384Mi
+    limits:
+      cpu: 500m
+      memory: 768Mi
   env:
     SPRING_DATASOURCE_URL: "jdbc:postgresql://postgresql:5432/notifications_db"
     SPRING_DATASOURCE_USERNAME: "postgres"
@@ -28,8 +49,24 @@ health-notification-service:
     BEER_TRACKING_INTERNAL_URL: "http://beer-tracker-beer-tracking-service:8082"
 
 statistics-service:
+  resources:
+    requests:
+      cpu: 100m
+      memory: 384Mi
+    limits:
+      cpu: 500m
+      memory: 768Mi
   env:
     SPRING_DATASOURCE_URL: "jdbc:postgresql://postgresql:5432/statistics_db"
     SPRING_DATASOURCE_USERNAME: "postgres"
     JWKS_URI: "http://beer-tracker-auth-service:8081/auth/.well-known/jwks.json"
     BEER_TRACKING_INTERNAL_URL: "http://beer-tracker-beer-tracking-service:8082"
+
+frontend:
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 200m
+      memory: 128Mi
