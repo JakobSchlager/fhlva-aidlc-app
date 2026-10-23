@@ -94,9 +94,13 @@ declare -A SERVICE_DIRS=(
 
 for svc in "${!SERVICE_DIRS[@]}"; do
   IMAGE="$ACR_LOGIN_SERVER/$svc:$GIT_SHA"
-  echo "  Building and pushing $IMAGE..."
-  docker build -t "$IMAGE" "${SERVICE_DIRS[$svc]}"
-  docker push "$IMAGE"
+  if az acr repository show-tags --name "$ACR_NAME" --repository "$svc" --output tsv 2>/dev/null | grep -qx "$GIT_SHA"; then
+    echo "  Image $IMAGE already exists in ACR ($ACR_NAME), skipping build and push."
+  else
+    echo "  Building and pushing $IMAGE..."
+    docker build -t "$IMAGE" "${SERVICE_DIRS[$svc]}"
+    docker push "$IMAGE"
+  fi
 done
 
 # --- Get AKS credentials -----------------------------------------------------
@@ -107,7 +111,7 @@ az aks get-credentials \
   --overwrite-existing
 kubelogin convert-kubeconfig -l azurecli 2>/dev/null || true
 
-# --- Install Bitnami PostgreSQL (idempotent) ---------------------------------
+# --- Install Bitnami PostgreSQL (idempotent with retry) ------------------------
 echo "Setting up PostgreSQL..."
 kubectl apply -f - <<EOF
 apiVersion: v1
@@ -120,15 +124,50 @@ metadata:
     meta.helm.sh/release-name: "$RELEASE"
     meta.helm.sh/release-namespace: "$NAMESPACE"
 EOF
-if ! helm status postgresql --namespace="$NAMESPACE" &>/dev/null; then
+
+if ! helm status postgresql --namespace="$NAMESPACE" 2>&1 | grep -q "STATUS: deployed"; then
   helm repo add bitnami https://charts.bitnami.com/bitnami 2>/dev/null || true
-  helm repo update
-  helm install postgresql bitnami/postgresql \
-    --namespace="$NAMESPACE" \
-    --set auth.postgresPassword="$POSTGRES_APP_PASSWORD" \
-    --set auth.username=postgres \
-    --wait --timeout=5m
+  
+  MAX_RETRIES=5
+  RETRY=0
+  PG_READY=0
+  
+  while [ $RETRY -lt $MAX_RETRIES ]; do
+    RETRY=$((RETRY + 1))
+    echo "Attempt $RETRY of $MAX_RETRIES: Fetching and installing PostgreSQL chart..."
+    helm repo update bitnami 2>/dev/null || helm repo update || true
+
+    # Clean up any previously failed/pending helm release so install/upgrade can proceed cleanly
+    if helm status postgresql --namespace="$NAMESPACE" 2>&1 | grep -qE "STATUS: (failed|pending-)"; then
+      echo "Cleaning up incomplete/failed PostgreSQL release before retrying..."
+      helm uninstall postgresql --namespace="$NAMESPACE" 2>/dev/null || true
+      sleep 5
+    fi
+
+    if helm upgrade --install postgresql bitnami/postgresql \
+      --namespace="$NAMESPACE" \
+      --set auth.postgresPassword="$POSTGRES_APP_PASSWORD" \
+      --set auth.username=postgres \
+      --wait --timeout=5m; then
+      PG_READY=1
+      break
+    else
+      echo "PostgreSQL chart installation/download failed (e.g. transient 502 Bad Gateway). Waiting 10s before retry..."
+      sleep 10
+    fi
+  done
+
+  if [ $PG_READY -ne 1 ]; then
+    echo "ERROR: Failed to install PostgreSQL chart after $MAX_RETRIES attempts." >&2
+    exit 1
+  fi
+else
+  echo "PostgreSQL release is already deployed and healthy in namespace '$NAMESPACE'."
 fi
+
+# Ensure postgresql-0 pod is ready before running initialization
+echo "Ensuring PostgreSQL pod is ready..."
+kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=postgresql -n "$NAMESPACE" --timeout=180s
 
 # --- Initialize databases (idempotent) ---------------------------------------
 echo "Initializing databases..."
@@ -173,8 +212,3 @@ echo ""
 echo "Next steps:"
 echo "1. Get the ingress public IP:"
 echo "   kubectl get ingress -n $NAMESPACE"
-echo ""
-echo "2. Initialise the PostgreSQL schema (first deploy only):"
-echo "   Get the PostgreSQL FQDN: az postgres flexible-server list -g $AZURE_RESOURCE_GROUP --query '[0].fullyQualifiedDomainName' -o tsv"
-echo "   psql \"host=<postgres-fqdn> port=5432 dbname=postgres user=appuser sslmode=require\" \\"
-echo "     -f postgres-init/init.sql"

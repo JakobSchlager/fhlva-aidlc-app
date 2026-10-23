@@ -37,7 +37,10 @@
 param(
     [string]$ConfigFile = "./.env.azure",
     [switch]$PreflightOnly,
-    [switch]$AutoApprove
+    [switch]$AutoApprove,
+    [switch]$Resume,
+    [switch]$SkipTerraform,
+    [ValidateRange(0, 7)][int]$StartAtStep = 0
 )
 
 $ErrorActionPreference = "Stop"
@@ -226,6 +229,10 @@ Get-Content $ConfigPath | ForEach-Object {
 }
 
 # --- Set Default Values and Fallbacks ----------------------------------------
+if ($Resume -or $SkipTerraform) {
+    if ($StartAtStep -eq 0) { $StartAtStep = 3 }
+    Write-Info -Text "Resume / SkipTerraform specified: Starting execution at Step $StartAtStep/7."
+}
 $SubscriptionId = $Config["AZURE_SUBSCRIPTION_ID"]
 $Location = if ($Config["AZURE_LOCATION"]) { $Config["AZURE_LOCATION"] } else { "germanywestcentral" }
 $ProjectName = if ($Config["AZURE_PROJECT_NAME"]) { $Config["AZURE_PROJECT_NAME"] } else { "fhooe-aidlc-pas" }
@@ -595,6 +602,7 @@ if ($LASTEXITCODE -ne 0) {
 Write-Success -Text "Terraform remote state bootstrapped."
 
 # --- STEP 2: Configure and Apply Terraform Infrastructure ---------------------
+if ($StartAtStep -le 2) {
 Write-Step -Step "2/7" -Text "Terraform Infrastructure Provisioning (dev stage)"
 
 # Build IP whitelist
@@ -667,6 +675,10 @@ try {
 } finally {
     Pop-Location
 }
+} else {
+    Write-Step -Step "2/7" -Text "Terraform Infrastructure Provisioning (dev stage) [SKIPPED]"
+    Write-Info -Text "Skipping Terraform provisioning (StartAtStep=$StartAtStep / Resume)."
+}
 
 # --- STEP 3: Phase 2 - Generate Passwords and Application Secrets -------------
 Write-Step -Step "3/7" -Text "Generating Application Secrets (README Scenario 3 Phase 2 Step 7)"
@@ -685,26 +697,48 @@ if (-not $InternalApiKey) {
     Write-Info -Text "Generated random INTERNAL_API_KEY."
 }
 
-# --- STEP 4: Build, Push and Deploy Application via scripts/deploy-azure.sh ---
-Write-Step -Step "4/7" -Text "Building, Pushing Images and Deploying via scripts/deploy-azure.sh"
-
-Write-Info -Text "Executing scripts/deploy-azure.sh via Git Bash (README Scenario 3 Phase 2 Step 8)..."
-$env:MSYS2_ARG_CONV_EXCL = "/subscriptions"
-Remove-Item Env:\MSYS_NO_PATHCONV -ErrorAction SilentlyContinue
-$env:AZURE_RESOURCE_GROUP = $ResourceGroup
-$env:POSTGRES_APP_PASSWORD = $DbPassword
-$env:INTERNAL_API_KEY = $InternalApiKey
-$env:AUTH_RSA_KEY_PATH = $AuthRsaKeyPath
-
-$deployScript = Join-Path $RepoRoot "scripts/deploy-azure.sh"
-& $GitBashExe $deployScript
-if ($LASTEXITCODE -ne 0) {
-    throw "deploy-azure.sh failed with exit code $LASTEXITCODE"
+# Save generated secrets back to .env.azure so future runs/retries remain consistent
+$envContent = Get-Content $ConfigPath -Raw
+$secretsUpdated = $false
+if (-not $Config["POSTGRES_APP_PASSWORD"]) {
+    $envContent = $envContent -replace '(?m)^POSTGRES_APP_PASSWORD=.*$', "POSTGRES_APP_PASSWORD=$DbPassword"
+    $Config["POSTGRES_APP_PASSWORD"] = $DbPassword
+    $secretsUpdated = $true
 }
-Write-Success -Text "Application release deployed successfully via Helm."
+if (-not $Config["INTERNAL_API_KEY"]) {
+    $envContent = $envContent -replace '(?m)^INTERNAL_API_KEY=.*$', "INTERNAL_API_KEY=$InternalApiKey"
+    $Config["INTERNAL_API_KEY"] = $InternalApiKey
+    $secretsUpdated = $true
+}
+if ($secretsUpdated) {
+    Set-Content -Path $ConfigPath -Value $envContent.TrimEnd() -NoNewline
+    Write-Info -Text "Saved generated secrets to '$ConfigPath' for idempotent re-runs."
+}
+
+# --- STEP 4: Build, Push and Deploy Application via scripts/deploy-azure.sh ---
+if ($StartAtStep -le 4) {
+    Write-Step -Step "4/7" -Text "Building, Pushing Images and Deploying via scripts/deploy-azure.sh"
+
+    Write-Info -Text "Executing scripts/deploy-azure.sh via Git Bash (README Scenario 3 Phase 2 Step 8)..."
+    $env:MSYS2_ARG_CONV_EXCL = "/subscriptions"
+    Remove-Item Env:\MSYS_NO_PATHCONV -ErrorAction SilentlyContinue
+    $env:AZURE_RESOURCE_GROUP = $ResourceGroup
+    $env:POSTGRES_APP_PASSWORD = $DbPassword
+    $env:INTERNAL_API_KEY = $InternalApiKey
+    $env:AUTH_RSA_KEY_PATH = $AuthRsaKeyPath
+
+    $deployScript = Join-Path $RepoRoot "scripts/deploy-azure.sh"
+    & $GitBashExe $deployScript
+    if ($LASTEXITCODE -ne 0) {
+        throw "deploy-azure.sh failed with exit code $LASTEXITCODE"
+    }
+    Write-Success -Text "Application release deployed successfully via Helm."
+} else {
+    Write-Step -Step "4/7" -Text "Building, Pushing Images and Deploying via scripts/deploy-azure.sh [SKIPPED]"
+}
 
 # --- STEP 5: Deploy Dynatrace Monitoring -------------------------------------
-if ($EnableDynatrace) {
+if ($StartAtStep -le 5 -and $EnableDynatrace) {
     Write-Step -Step "5/7" -Text "Deploying Dynatrace Monitoring (charts/dynakube.yaml)"
     
     $DynaKubePath = Join-Path $RepoRoot "charts/dynakube.yaml"
