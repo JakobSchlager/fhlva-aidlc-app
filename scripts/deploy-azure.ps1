@@ -127,6 +127,75 @@ function Invoke-GitBash {
     }
 }
 
+# --- IP / CIDR Helper Functions ----------------------------------------------
+function Convert-ToCidrParts {
+    param([string]$Address)
+    $clean = $Address.Trim()
+    if ($clean.Contains("/")) {
+        $parts = $clean.Split("/")
+        return @{
+            Ip     = [System.Net.IPAddress]::Parse($parts[0].Trim())
+            Prefix = [int]$parts[1].Trim()
+        }
+    } else {
+        return @{
+            Ip     = [System.Net.IPAddress]::Parse($clean)
+            Prefix = 32
+        }
+    }
+}
+
+function Test-SubnetContained {
+    param(
+        [Parameter(Mandatory=$true)][string]$Candidate,
+        [Parameter(Mandatory=$true)][string]$ParentCidr
+    )
+    try {
+        if ([string]::IsNullOrWhiteSpace($Candidate) -or [string]::IsNullOrWhiteSpace($ParentCidr)) {
+            return $false
+        }
+        $cand = Convert-ToCidrParts $Candidate
+        $parent = Convert-ToCidrParts $ParentCidr
+
+        if ($cand.Ip.AddressFamily -ne $parent.Ip.AddressFamily) { return $false }
+        if ($cand.Ip.AddressFamily -ne [System.Net.Sockets.AddressFamily]::InterNetwork) { return $false }
+
+        if ($cand.Prefix -lt $parent.Prefix) {
+            return $false
+        }
+
+        $candBytes = $cand.Ip.GetAddressBytes()
+        $parentBytes = $parent.Ip.GetAddressBytes()
+        if ([BitConverter]::IsLittleEndian) {
+            [Array]::Reverse($candBytes)
+            [Array]::Reverse($parentBytes)
+        }
+        $candUint = [BitConverter]::ToUInt32($candBytes, 0)
+        $parentUint = [BitConverter]::ToUInt32($parentBytes, 0)
+
+        $parentMask = if ($parent.Prefix -eq 0) { [uint32]0 } else { [uint32]::MaxValue -shl (32 - $parent.Prefix) }
+
+        return ($candUint -band $parentMask) -eq ($parentUint -band $parentMask)
+    } catch {
+        return $false
+    }
+}
+
+function Find-ContainingRange {
+    param(
+        [Parameter(Mandatory=$true)][string]$Candidate,
+        [Parameter(Mandatory=$true)][string[]]$Ranges
+    )
+    foreach ($r in $Ranges) {
+        if (-not [string]::IsNullOrWhiteSpace($r)) {
+            if (Test-SubnetContained $Candidate $r) {
+                return $r
+            }
+        }
+    }
+    return $null
+}
+
 # --- Load Environment Configuration -----------------------------------------
 Write-Header -Text "Beer Tracker - Azure AKS Deployment"
 
@@ -443,6 +512,11 @@ try {
     $ipObj = Invoke-RestMethod -Uri "https://api.ipify.org?format=json" -TimeoutSec 5 -ErrorAction Stop
     $PublicIp = $ipObj.ip
     Write-Success -Text "Detected caller public IP: $PublicIp"
+    $baseDefaultRanges = @("78.104.0.0/16", "185.154.40.0/22", "193.170.0.0/15")
+    $coveredBy = Find-ContainingRange -Candidate $PublicIp -Ranges $baseDefaultRanges
+    if ($coveredBy) {
+        Write-Info -Text "Caller IP $PublicIp is already within allowed range '$coveredBy' (will not be duplicated)."
+    }
 } catch {
     Write-WarnMsg -Text "Could not auto-detect public IP. Will rely on configured ranges."
 }
@@ -509,12 +583,26 @@ Write-Step -Step "2/7" -Text "Terraform Infrastructure Provisioning (dev stage)"
 
 # Build IP whitelist
 $AllowedIps = @("78.104.0.0/16", "185.154.40.0/22", "193.170.0.0/15")
-if ($PublicIp) {
-    $AllowedIps += "$PublicIp/32"
-}
 if ($Config["ADDITIONAL_ALLOWED_IPS"]) {
     $extra = $Config["ADDITIONAL_ALLOWED_IPS"] -split "," | ForEach-Object { $_.Trim() } | Where-Object { $_ }
-    $AllowedIps += $extra
+    foreach ($entry in $extra) {
+        $parent = Find-ContainingRange -Candidate $entry -Ranges $AllowedIps
+        if ($parent) {
+            Write-Info -Text "Additional IP range '$entry' is already covered by '$parent'. Skipping."
+        } elseif (-not ($AllowedIps -contains $entry)) {
+            $AllowedIps += $entry
+        }
+    }
+}
+
+if ($PublicIp) {
+    $containingRange = Find-ContainingRange -Candidate $PublicIp -Ranges $AllowedIps
+    if ($containingRange) {
+        Write-Info -Text "Caller public IP $PublicIp is already contained in allowed CIDR '$containingRange'. Skipping addition to prevent overlapping subnet errors."
+    } else {
+        $AllowedIps += "$PublicIp/32"
+        Write-Info -Text "Added caller public IP ($PublicIp/32) to allowed IP list."
+    }
 }
 $AllowedIps = $AllowedIps | Select-Object -Unique
 
