@@ -28,7 +28,17 @@ Change the `alert_email_address` to your email address.
 
 ### 2. Create the remote state storage account
 
-Run this once before the first `terraform init`:
+Run the following commands once before the first `terraform init`:
+
+For creating a resource group for holding all terraform related resources: 
+
+```bash
+az group create \
+  --name <terraform-resource-group-name> \
+  --location germanywestcentral
+```
+
+For creating the remote state storage account:
 
 ```bash
 scripts/bootstrap-tf-state.sh \
