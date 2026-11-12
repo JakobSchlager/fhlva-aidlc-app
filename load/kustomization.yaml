@@ -1,0 +1,19 @@
+# ConfigMaps for running the load driver in Kubernetes:
+#   k6-scripts — script.js, profiles.js, slo.json (used by the Job and the Helm test)
+#   k6-run     — run settings from k8s/run.env (profile, rate, targets)
+#
+#   kubectl apply -k load/ -n <namespace>
+#
+# Names are kept stable (no hash suffix) so the Job and the Helm test can refer to them.
+generatorOptions:
+  disableNameSuffixHash: true
+
+configMapGenerator:
+  - name: k6-scripts
+    files:
+      - script.js
+      - profiles.js
+      - slo.json
+  - name: k6-run
+    envs:
+      - k8s/run.env
