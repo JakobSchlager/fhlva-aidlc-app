@@ -28,6 +28,7 @@ build/
 .env
 .env.*
 !.env.example
+!.env.azure.example
 
 # ─── IDE / Editor ────────────────────────────────────────────────────────────
 # IntelliJ IDEA
@@ -99,6 +100,9 @@ test-results/
 
 # ─── Terraform ───────────────────────────────────────────────────────────────
 .terraform/
+**/.terraform/
+.terraform.lock.hcl
+**/.terraform.lock.hcl
 *.tfstate
 *.tfstate.*
 *.tfplan
@@ -108,6 +112,9 @@ crash.*.log
 # Secret tfvars — never commit; inject via TF_VAR_* in CI/CD
 infra/terraform/*.auto.tfvars
 infra/terraform/secrets.tfvars
+*.auto.tfvars
+*.auto.tfvars.json
+dev.auto.tfvars.json
 
 # Keep non-secret environment var files tracked
 !infra/terraform/dev.tfvars

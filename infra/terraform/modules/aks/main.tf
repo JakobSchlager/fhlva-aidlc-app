@@ -36,13 +36,13 @@ resource "azurerm_kubernetes_cluster" "main" {
 
   default_node_pool {
     name                 = "system"
-    vm_size              = "Standard_D4s_v3"
+    vm_size              = var.vm_size
     os_disk_size_gb      = 128
     os_disk_type         = "Managed"
     os_sku               = "AzureLinux"
     auto_scaling_enabled = true
-    min_count            = 2
-    max_count            = 5
+    min_count            = var.min_count
+    max_count            = var.max_count
     max_pods             = 110
     vnet_subnet_id       = var.aks_subnet_id
 
