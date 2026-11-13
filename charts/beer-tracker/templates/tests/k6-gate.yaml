@@ -1,0 +1,54 @@
+{{- if .Values.loadTest.enabled }}
+# k6 gate as a Helm test: `helm test <release>` runs the gate profile from load/
+# against this release's services. Needs the k6-scripts ConfigMap in the release
+# namespace (kubectl apply -k load/). See load/README.md.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ .Release.Name }}-k6-gate
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: k6-gate
+  annotations:
+    helm.sh/hook: test
+    helm.sh/hook-delete-policy: before-hook-creation
+spec:
+  restartPolicy: Never
+  securityContext:
+    runAsNonRoot: true
+  containers:
+    - name: k6
+      image: {{ .Values.loadTest.image }}
+      args: ["run", "/load/script.js"]
+      workingDir: /load
+      env:
+        {{- $r := .Release.Name }}
+        {{- $defaults := dict
+              "PROFILE" "gate"
+              "USERS" "5"
+              "RUN_NAME" (printf "helm-test-%s-r%d" $r .Release.Revision)
+              "BASE_URL" (printf "http://%s-frontend:80" $r)
+              "AUTH_URL" (printf "http://%s-auth-service:8081" $r)
+              "TRACKING_URL" (printf "http://%s-beer-tracking-service:8082" $r)
+              "STATISTICS_URL" (printf "http://%s-statistics-service:8084" $r)
+              "NOTIFICATIONS_URL" (printf "http://%s-health-notification-service:8083" $r) }}
+        {{- range $name, $value := merge (deepCopy .Values.loadTest.env) $defaults }}
+        - name: {{ $name }}
+          value: {{ $value | quote }}
+        {{- end }}
+      resources:
+        requests:
+          cpu: 250m
+          memory: 256Mi
+        limits:
+          cpu: "1"
+          memory: 512Mi
+      volumeMounts:
+        - name: scripts
+          mountPath: /load
+          readOnly: true
+  volumes:
+    - name: scripts
+      configMap:
+        name: k6-scripts
+{{- end }}

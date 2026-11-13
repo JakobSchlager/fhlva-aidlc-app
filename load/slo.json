@@ -1,0 +1,12 @@
+{
+  "_comment": "Your group's SLOs as k6 thresholds. Placeholder values: replace them with your own. errorRate is a fraction (0.01 = 1 %); p95/p99 are milliseconds. Step names are the 'name' tags in script.js.",
+  "errorRate": 0.01,
+  "steps": {
+    "statistics_me": { "p95": 1000 },
+    "statistics_trend": { "p95": 1000 },
+    "statistics_global": { "p95": 1000 },
+    "tracking_list": { "p95": 1000 },
+    "tracking_create": { "p95": 1000 },
+    "notifications_list": { "p95": 1000 }
+  }
+}
