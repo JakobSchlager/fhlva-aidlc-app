@@ -8,6 +8,7 @@ A [k6](https://grafana.com/docs/k6/latest/) load driver for Beer Tracker. One sc
 | `profiles.js` | Load profiles and their hard caps |
 | `slo.json` | Your SLOs as thresholds — **placeholder values, replace them** |
 | `run-local.sh` | Run against the Compose stack |
+| `run-local.cmd` | The same for Windows `cmd` |
 | `kustomization.yaml`, `k8s/run.env`, `k8s/job.yaml` | Run as a Kubernetes Job |
 | `../charts/beer-tracker/templates/tests/k6-gate.yaml` | The `gate` profile as a Helm test |
 
@@ -79,6 +80,18 @@ PROFILE=gate ./load/run-local.sh
 ```
 
 The script runs the k6 container on the Compose network and targets nginx directly (`http://nginx:80`). Extra arguments go to `k6 run`, e.g. `./load/run-local.sh --summary-export /dev/stdout`. Stop a run with `Ctrl+C`.
+
+On Windows in `cmd`, use `run-local.cmd` instead:
+
+```bat
+set PROFILE=smoke
+load\run-local.cmd
+
+set PROFILE=baseline& set RATE=5& set DURATION=2m
+load\run-local.cmd
+```
+
+`set` keeps the variables for the rest of the `cmd` session; clear one with `set RATE=`.
 
 ## Run in Kubernetes (minikube, AKS)
 
