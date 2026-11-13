@@ -85,3 +85,11 @@ frontend:
   serviceAccount:
     name: frontend
   env: {}
+
+# k6 gate as a Helm test (see load/README.md). Off by default.
+loadTest:
+  enabled: false
+  image: docker.io/grafana/k6:2.3.0
+  # Environment for the gate pod, e.g. RATE, DURATION, or STATISTICS_URL to target a canary Service.
+  # Keys set here override the template's defaults (PROFILE=gate and the release's service URLs).
+  env: {}

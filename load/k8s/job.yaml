@@ -1,0 +1,47 @@
+# One k6 run as a Kubernetes Job. Requires the ConfigMaps from load/kustomization.yaml.
+#
+#   kubectl apply -k load/ -n beer-tracker
+#   kubectl apply -f load/k8s/job.yaml -n beer-tracker
+#   kubectl logs -f job/k6-load -n beer-tracker
+#   kubectl delete job k6-load -n beer-tracker      # stop a run, or before starting the next one
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: k6-load
+  labels:
+    app: k6-load
+spec:
+  backoffLimit: 0              # a failed run is not restarted
+  activeDeadlineSeconds: 14400 # hard stop after 4 h, whatever DURATION says
+  ttlSecondsAfterFinished: 3600
+  template:
+    metadata:
+      labels:
+        app: k6-load
+    spec:
+      restartPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+      containers:
+        - name: k6
+          image: docker.io/grafana/k6:2.3.0
+          args: ["run", "/load/script.js"]
+          workingDir: /load
+          envFrom:
+            - configMapRef:
+                name: k6-run
+          resources:
+            requests:
+              cpu: 250m
+              memory: 256Mi
+            limits:
+              cpu: "1"
+              memory: 512Mi
+          volumeMounts:
+            - name: scripts
+              mountPath: /load
+              readOnly: true
+      volumes:
+        - name: scripts
+          configMap:
+            name: k6-scripts

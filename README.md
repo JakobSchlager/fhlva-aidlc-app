@@ -10,6 +10,7 @@ A microservices application for tracking beer consumption with health threshold 
 - [Scenario 1 — Podman Compose / Docker Compose](#scenario-1--podman-compose--docker-compose)
 - [Scenario 2 — minikube](#scenario-2--minikube)
 - [Scenario 3 — Azure AKS](#scenario-3--azure-aks)
+- [Load testing](#load-testing)
 - [Troubleshooting](#troubleshooting)
 
 ---
@@ -445,6 +446,18 @@ Note the `ADDRESS` on the ingress — that is the Application Gateway public IP.
 | Application Gateway returns 502 | Backend health probe failing. Check pod readiness (`kubectl get pods`) and ensure `initialDelaySeconds` is long enough for Spring Boot startup (~30 s). |
 | ACR push denied | Re-login: `az acr login --name <acr-name>`. Confirm the identity has `AcrPush` role on the registry. |
 | `Forbidden ... User does not have access to the resource in Azure. Update role assignment to allow access.` from `kubectl` | You are authenticated (kubelogin works) but hold no AKS RBAC role. Add your object ID to `local.aks_cluster_admin_object_ids` and re-apply Terraform, or assign it by hand: `az role assignment create --assignee <upn-or-object-id> --role "Azure Kubernetes Service RBAC Cluster Admin" --scope $(az aks show -g <resource-group> -n <cluster-name> --query id -o tsv)`. Role assignments can take a few minutes to take effect; retry afterwards. |
+
+---
+
+## Load testing
+
+A k6 load driver lives in [`load/`](load/README.md). It replays the frontend's main journey, offers named load profiles (`smoke`, `baseline`, `spike`, `newcomers`, `gate`), and turns your SLOs in `load/slo.json` into pass/fail thresholds. It runs from the `grafana/k6` container image — no local install:
+
+```bash
+PROFILE=smoke ./load/run-local.sh          # against the Compose stack
+```
+
+For minikube and AKS it runs as a Kubernetes Job or as a Helm test; see [`load/README.md`](load/README.md).
 
 ---
 
