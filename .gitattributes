@@ -5,3 +5,5 @@
 .env.*      text eol=lf
 Dockerfile  text eol=lf
 *.conf      text eol=lf
+*.cmd       text eol=crlf
+*.bat       text eol=crlf
