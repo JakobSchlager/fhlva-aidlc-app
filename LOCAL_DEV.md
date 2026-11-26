@@ -2,6 +2,24 @@
 
 A concise guide for running, accessing, and testing the application locally in the Devcontainer.
 
+### Troubleshooting Startup Issues (Reboot / IPAM Lock)
+
+If Podman reports `boot ID differs from cached boot ID` or minikube fails with `IPAM error: requested ip address ... is already allocated`:
+
+```bash
+# Clear stale Podman runtime storage, libpod state, and Netavark IPAM database
+rm -rf /run/containers/storage/ /run/libpod/ /run/containers/networks/
+
+# Start minikube
+devcontainer-minikube-start
+```
+
+If the cluster state remains corrupted or refuses to recover, recreate the cluster cleanly:
+```bash
+minikube delete
+./scripts/deploy-minikube.sh
+```
+
 ---
 
 ## 1. Start Cluster & Deploy Application
