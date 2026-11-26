@@ -52,6 +52,22 @@ public class StatisticsRefreshService {
     private final DailyTrendCacheRepository dailyTrendCacheRepository;
     private final ObjectMapper objectMapper;
 
+    /**
+     * Live daily standard drinks for {@code userId}, straight from the tracking service,
+     * bypassing the cache: one HTTP call per day in the window (used by FEATURE_LIVE_TREND).
+     */
+    public Map<LocalDate, BigDecimal> fetchLiveDailyDrinks(UUID userId, LocalDate from, LocalDate to) {
+        Map<LocalDate, BigDecimal> result = new java.util.HashMap<>();
+        for (LocalDate date = from; !date.isAfter(to); date = date.plusDays(1)) {
+            LocalDate day = date;
+            trackingServiceClient.getDailySummary(userId, day).ifPresent(summary ->
+                    result.put(day, summary.totalStandardDrinks() != null
+                            ? summary.totalStandardDrinks()
+                            : BigDecimal.ZERO));
+        }
+        return result;
+    }
+
     // -------------------------------------------------------------------------
     // Public API
     // -------------------------------------------------------------------------

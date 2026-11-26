@@ -1,21 +1,21 @@
 apiVersion: v2
 name: beer-tracker
 description: Umbrella chart for the beer consumption tracking application
-version: 0.1.0
+version: 0.2.2
 appVersion: "1.0.0"
 dependencies:
   - name: auth-service
-    version: 0.1.0
+    version: 0.2.2
     repository: "file://../auth-service"
   - name: beer-tracking-service
-    version: 0.1.0
+    version: 0.2.2
     repository: "file://../beer-tracking-service"
   - name: health-notification-service
-    version: 0.1.0
+    version: 0.2.2
     repository: "file://../health-notification-service"
   - name: statistics-service
-    version: 0.1.0
+    version: 0.2.2
     repository: "file://../statistics-service"
   - name: frontend
-    version: 0.1.0
+    version: 0.2.2
     repository: "file://../frontend"

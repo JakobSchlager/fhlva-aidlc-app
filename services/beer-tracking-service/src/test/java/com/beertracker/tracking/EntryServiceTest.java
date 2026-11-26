@@ -25,6 +25,9 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
+import org.springframework.test.util.ReflectionTestUtils;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
@@ -250,5 +253,39 @@ class EntryServiceTest {
         entry.setTimestamp(timestamp);
         entry.setCreatedAt(Instant.now().truncatedTo(ChronoUnit.MILLIS));
         return entry;
+    }
+
+    // --- Feature flag FEATURE_ENTRY_DAY_TOTALS ---------------------------------
+
+    @Test
+    void list_dayTotalsOff_noExtraQueriesAndNoTotals() {
+        UUID userId = UUID.randomUUID();
+        Entry entry = buildEntry(UUID.randomUUID(), userId, "Stout", 500, new BigDecimal("5.0"), Instant.now());
+        when(entryRepository.findByUserId(eq(userId), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(entry)));
+
+        PagedResponse<EntryResponse> page = entryService.list(userId, 0, 20, null, null);
+
+        assertThat(page.items().get(0).dayStandardDrinks()).isNull();
+        verify(entryRepository, never()).findByUserIdAndTimestampBetween(any(), any(), any());
+    }
+
+    @Test
+    void list_dayTotalsOn_oneQueryPerEntryAndTotalsFilled() {
+        ReflectionTestUtils.setField(entryService, "entryDayTotals", true);
+        UUID userId = UUID.randomUUID();
+        Instant ts = Instant.parse("2026-11-20T18:00:00Z");
+        Entry a = buildEntry(UUID.randomUUID(), userId, "Lager", 500, new BigDecimal("5.0"), ts);
+        Entry b = buildEntry(UUID.randomUUID(), userId, "IPA", 500, new BigDecimal("6.0"), ts.minusSeconds(3600));
+        when(entryRepository.findByUserId(eq(userId), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(a, b)));
+        when(entryRepository.findByUserIdAndTimestampBetween(eq(userId), any(Instant.class), any(Instant.class)))
+                .thenReturn(List.of(a, b));
+
+        PagedResponse<EntryResponse> page = entryService.list(userId, 0, 20, null, null);
+
+        assertThat(page.items().get(0).standardDrinks()).isEqualByComparingTo("2.50");
+        assertThat(page.items().get(0).dayStandardDrinks()).isEqualByComparingTo("5.50");
+        verify(entryRepository, times(2)).findByUserIdAndTimestampBetween(eq(userId), any(Instant.class), any(Instant.class));
     }
 }

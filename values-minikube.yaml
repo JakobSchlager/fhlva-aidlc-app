@@ -8,6 +8,15 @@ auth-service:
     repository: auth-service
     tag: latest
     pullPolicy: Never
+  # Small cluster: replace pods one at a time instead of starting an extra JVM first
+  # (with maxSurge > 0 an upgrade briefly runs old and new pod side by side; on a 4-6 GiB minikube
+  # that extra JVM caused OOM kills, rehearsal 2026-11-23). Costs a few seconds of downtime for a
+  # service with one replica.
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 0
+      maxUnavailable: 1
   env:
     SPRING_DATASOURCE_URL: "jdbc:postgresql://postgresql:5432/auth_db"
     SPRING_DATASOURCE_USERNAME: "postgres"
@@ -18,6 +27,12 @@ beer-tracking-service:
     repository: beer-tracking-service
     tag: latest
     pullPolicy: Never
+  # Same as auth-service: no extra pod during upgrades.
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 0
+      maxUnavailable: 1
   env:
     SPRING_DATASOURCE_URL: "jdbc:postgresql://postgresql:5432/tracking_db"
     SPRING_DATASOURCE_USERNAME: "postgres"
@@ -28,6 +43,12 @@ health-notification-service:
     repository: health-notification-service
     tag: latest
     pullPolicy: Never
+  # Same as auth-service: no extra pod during upgrades.
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 0
+      maxUnavailable: 1
   env:
     SPRING_DATASOURCE_URL: "jdbc:postgresql://postgresql:5432/notifications_db"
     SPRING_DATASOURCE_USERNAME: "postgres"
@@ -39,6 +60,12 @@ statistics-service:
     repository: statistics-service
     tag: latest
     pullPolicy: Never
+  # Same as auth-service: no extra pod during upgrades.
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 0
+      maxUnavailable: 1
   env:
     SPRING_DATASOURCE_URL: "jdbc:postgresql://postgresql:5432/statistics_db"
     SPRING_DATASOURCE_USERNAME: "postgres"

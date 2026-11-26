@@ -1,0 +1,15 @@
+# Puts the k6 scripts and run settings (load/kustomization.yaml) into the staging namespace,
+# for the Helm test and for manual k6 Jobs.
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: k6-scripts-staging
+  namespace: flux-system
+spec:
+  interval: 5m
+  path: ./load
+  prune: true
+  targetNamespace: beer-tracker-staging
+  sourceRef:
+    kind: GitRepository
+    name: beer-tracker

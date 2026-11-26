@@ -1,0 +1,60 @@
+# Release state of the staging stage. Change it by pull request; Flux applies it.
+# Staging: no ingress (reach it with kubectl port-forward); the k6 gate runs after every upgrade.
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: beer-tracker
+  namespace: beer-tracker-staging
+spec:
+  interval: 1m
+  releaseName: beer-tracker
+  timeout: 10m
+  chart:
+    spec:
+      chart: ./charts/beer-tracker
+      # ChartVersion: only a new chart version (Chart.yaml) or a change to this HelmRelease
+      # upgrades the stage. With "Revision", every commit to the branch upgraded both stages,
+      # which adds deployment events that did not change anything.
+      reconcileStrategy: ChartVersion
+      sourceRef:
+        kind: GitRepository
+        name: beer-tracker
+        namespace: flux-system
+      valuesFiles:
+        - ./charts/beer-tracker/values.yaml
+        # values-minikube.yaml or values-azure.yaml, set per cluster by scripts/setup-gitops.sh
+        - ./${CLUSTER_VALUES}
+  install:
+    remediation:
+      retries: 2
+  upgrade:
+    remediation:
+      retries: 1
+      strategy: rollback
+  # Runs the chart's Helm tests (the k6 gate) after every install/upgrade.
+  # A failing test counts as a failed release and triggers the rollback above.
+  test:
+    enable: true
+  values:
+    namespace:
+      create: false
+    ingress:
+      enabled: false
+    loadTest:
+      enabled: true
+    # --- Image tags: this is what a release changes ---
+    auth-service:
+      image:
+        tag: latest
+    beer-tracking-service:
+      image:
+        tag: latest
+    health-notification-service:
+      image:
+        tag: latest
+    statistics-service:
+      image:
+        tag: latest
+    frontend:
+      image:
+        tag: latest

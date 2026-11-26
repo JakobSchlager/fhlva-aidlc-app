@@ -23,15 +23,21 @@ spec:
       workingDir: /load
       env:
         {{- $r := .Release.Name }}
+        {{- /* A service with an enabled canary is tested through its canary-only Service. */}}
+        {{- $host := dict }}
+        {{- range $svc := list "frontend" "auth-service" "beer-tracking-service" "statistics-service" "health-notification-service" }}
+        {{- $canary := (index $.Values $svc).canary | default dict }}
+        {{- $_ := set $host $svc (printf "%s-%s%s" $r $svc (ternary "-canary" "" (eq ($canary.enabled | toString) "true"))) }}
+        {{- end }}
         {{- $defaults := dict
               "PROFILE" "gate"
               "USERS" "5"
               "RUN_NAME" (printf "helm-test-%s-r%d" $r .Release.Revision)
-              "BASE_URL" (printf "http://%s-frontend:80" $r)
-              "AUTH_URL" (printf "http://%s-auth-service:8081" $r)
-              "TRACKING_URL" (printf "http://%s-beer-tracking-service:8082" $r)
-              "STATISTICS_URL" (printf "http://%s-statistics-service:8084" $r)
-              "NOTIFICATIONS_URL" (printf "http://%s-health-notification-service:8083" $r) }}
+              "BASE_URL" (printf "http://%s:80" $host.frontend)
+              "AUTH_URL" (printf "http://%s:8081" (index $host "auth-service"))
+              "TRACKING_URL" (printf "http://%s:8082" (index $host "beer-tracking-service"))
+              "STATISTICS_URL" (printf "http://%s:8084" (index $host "statistics-service"))
+              "NOTIFICATIONS_URL" (printf "http://%s:8083" (index $host "health-notification-service")) }}
         {{- range $name, $value := merge (deepCopy .Values.loadTest.env) $defaults }}
         - name: {{ $name }}
           value: {{ $value | quote }}

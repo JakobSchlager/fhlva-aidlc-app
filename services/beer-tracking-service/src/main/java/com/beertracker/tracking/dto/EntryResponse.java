@@ -10,6 +10,9 @@ public record EntryResponse(
         String beerName,
         int volumeMl,
         BigDecimal abv,
-        Instant timestamp
+        Instant timestamp,
+        // Filled only with FEATURE_ENTRY_DAY_TOTALS on (see EntryService); null otherwise.
+        BigDecimal standardDrinks,
+        BigDecimal dayStandardDrinks
 ) {
 }

@@ -1,0 +1,224 @@
+{
+  "version": 15,
+  "variables": [
+    {
+      "key": "Run",
+      "type": "query",
+      "visible": true,
+      "editable": true,
+      "multiple": false,
+      "input": "fetch spans\n| filter span.kind == \"server\"\n| fieldsAdd hdr = coalesce(`request_attribute.x-dynatrace-test`, `http.request.header.x-dynatrace-test`)\n| filter isNotNull(hdr) and contains(hdr, \"SI=k6\")\n| parse hdr, \"'VU=' INT:VU ';SI=' LD:SI ';LTN=' LD:LTN ';LSN=' LD:LSN ';TSN=' LD:TSN ';'\"\n| summarize start = min(start_time), by:{LTN}\n| sort start desc\n| fields LTN"
+    },
+    {
+      "key": "Script",
+      "type": "query",
+      "visible": true,
+      "editable": true,
+      "multiple": true,
+      "input": "fetch spans\n| filter span.kind == \"server\"\n| fieldsAdd hdr = coalesce(`request_attribute.x-dynatrace-test`, `http.request.header.x-dynatrace-test`)\n| filter isNotNull(hdr) and contains(hdr, \"SI=k6\")\n| parse hdr, \"'VU=' INT:VU ';SI=' LD:SI ';LTN=' LD:LTN ';LSN=' LD:LSN ';TSN=' LD:TSN ';'\"\n| summarize n = count(), by:{LSN}\n| fields LSN"
+    }
+  ],
+  "tiles": {
+    "0": {
+      "type": "markdown",
+      "content": "## BeerTracker load test analysis\nRequests tagged by the k6 driver (`load/script.js`) with\n`x-dynatrace-test: VU=<vu>;SI=k6;LTN=<RUN_NAME>;LSN=<script>;TSN=<step>;`.\nPick a **Run** (`LTN` = `RUN_NAME`) and **Script** (`LSN`); set the timeframe to cover the run.\nNeeds the header in Grail: a request attribute named `x-dynatrace-test` capturing the full header value, **or** request-header capture for `x-dynatrace-test`.\nDurations are server-side span durations, not k6's client-side `http_req_duration`. Steps named `setup_*` come from k6 `setup()` (VU 0) and are excluded from the VU counts."
+    },
+    "1": {
+      "type": "data",
+      "title": "Requests",
+      "query": "fetch spans\n| filter span.kind == \"server\"\n| fieldsAdd hdr = coalesce(`request_attribute.x-dynatrace-test`, `http.request.header.x-dynatrace-test`)\n| filter isNotNull(hdr) and contains(hdr, \"SI=k6\")\n| parse hdr, \"'VU=' INT:VU ';SI=' LD:SI ';LTN=' LD:LTN ';LSN=' LD:LSN ';TSN=' LD:TSN ';'\"\n| filter LTN == $Run and in(LSN, array($Script))\n| summarize Requests = count()",
+      "visualization": "singleValue"
+    },
+    "2": {
+      "type": "data",
+      "title": "Failure rate %",
+      "query": "fetch spans\n| filter span.kind == \"server\"\n| fieldsAdd hdr = coalesce(`request_attribute.x-dynatrace-test`, `http.request.header.x-dynatrace-test`)\n| filter isNotNull(hdr) and contains(hdr, \"SI=k6\")\n| parse hdr, \"'VU=' INT:VU ';SI=' LD:SI ';LTN=' LD:LTN ';LSN=' LD:LSN ';TSN=' LD:TSN ';'\"\n| filter LTN == $Run and in(LSN, array($Script))\n| summarize Failure_rate = 100.0 * countIf((request.is_failed == true or http.response.status_code >= 400)) / count()",
+      "visualization": "singleValue"
+    },
+    "3": {
+      "type": "data",
+      "title": "p95 response time",
+      "query": "fetch spans\n| filter span.kind == \"server\"\n| fieldsAdd hdr = coalesce(`request_attribute.x-dynatrace-test`, `http.request.header.x-dynatrace-test`)\n| filter isNotNull(hdr) and contains(hdr, \"SI=k6\")\n| parse hdr, \"'VU=' INT:VU ';SI=' LD:SI ';LTN=' LD:LTN ';LSN=' LD:LSN ';TSN=' LD:TSN ';'\"\n| filter LTN == $Run and in(LSN, array($Script))\n| summarize p95 = percentile(duration, 95)",
+      "visualization": "singleValue"
+    },
+    "4": {
+      "type": "data",
+      "title": "Max VUs seen",
+      "query": "fetch spans\n| filter span.kind == \"server\"\n| fieldsAdd hdr = coalesce(`request_attribute.x-dynatrace-test`, `http.request.header.x-dynatrace-test`)\n| filter isNotNull(hdr) and contains(hdr, \"SI=k6\")\n| parse hdr, \"'VU=' INT:VU ';SI=' LD:SI ';LTN=' LD:LTN ';LSN=' LD:LSN ';TSN=' LD:TSN ';'\"\n| filter LTN == $Run and in(LSN, array($Script))\n| filter VU > 0\n| summarize VUs = countDistinct(VU)",
+      "visualization": "singleValue"
+    },
+    "5": {
+      "type": "data",
+      "title": "Throughput (req/s)",
+      "query": "fetch spans\n| filter span.kind == \"server\"\n| fieldsAdd hdr = coalesce(`request_attribute.x-dynatrace-test`, `http.request.header.x-dynatrace-test`)\n| filter isNotNull(hdr) and contains(hdr, \"SI=k6\")\n| parse hdr, \"'VU=' INT:VU ';SI=' LD:SI ';LTN=' LD:LTN ';LSN=' LD:LSN ';TSN=' LD:TSN ';'\"\n| filter LTN == $Run and in(LSN, array($Script))\n| summarize n = count(), s = min(start_time), e = max(start_time)\n| fieldsAdd rps = n / (toLong(e - s) / 1000000000.0)\n| fields rps",
+      "visualization": "singleValue"
+    },
+    "6": {
+      "type": "data",
+      "title": "Requests per step",
+      "query": "fetch spans\n| filter span.kind == \"server\"\n| fieldsAdd hdr = coalesce(`request_attribute.x-dynatrace-test`, `http.request.header.x-dynatrace-test`)\n| filter isNotNull(hdr) and contains(hdr, \"SI=k6\")\n| parse hdr, \"'VU=' INT:VU ';SI=' LD:SI ';LTN=' LD:LTN ';LSN=' LD:LSN ';TSN=' LD:TSN ';'\"\n| filter LTN == $Run and in(LSN, array($Script))\n| makeTimeseries Requests = count(), by:{TSN}, interval:30s",
+      "visualization": "lineChart"
+    },
+    "7": {
+      "type": "data",
+      "title": "Response time p50 / p95 / p99",
+      "query": "fetch spans\n| filter span.kind == \"server\"\n| fieldsAdd hdr = coalesce(`request_attribute.x-dynatrace-test`, `http.request.header.x-dynatrace-test`)\n| filter isNotNull(hdr) and contains(hdr, \"SI=k6\")\n| parse hdr, \"'VU=' INT:VU ';SI=' LD:SI ';LTN=' LD:LTN ';LSN=' LD:LSN ';TSN=' LD:TSN ';'\"\n| filter LTN == $Run and in(LSN, array($Script))\n| makeTimeseries p50 = percentile(duration, 50), p95 = percentile(duration, 95), p99 = percentile(duration, 99), interval:30s",
+      "visualization": "lineChart"
+    },
+    "8": {
+      "type": "data",
+      "title": "Failed requests per step",
+      "query": "fetch spans\n| filter span.kind == \"server\"\n| fieldsAdd hdr = coalesce(`request_attribute.x-dynatrace-test`, `http.request.header.x-dynatrace-test`)\n| filter isNotNull(hdr) and contains(hdr, \"SI=k6\")\n| parse hdr, \"'VU=' INT:VU ';SI=' LD:SI ';LTN=' LD:LTN ';LSN=' LD:LSN ';TSN=' LD:TSN ';'\"\n| filter LTN == $Run and in(LSN, array($Script))\n| makeTimeseries Failures = countIf((request.is_failed == true or http.response.status_code >= 400)), by:{TSN}, interval:30s",
+      "visualization": "barChart"
+    },
+    "9": {
+      "type": "data",
+      "title": "Active VUs (distinct VU ids per 30 s)",
+      "query": "fetch spans\n| filter span.kind == \"server\"\n| fieldsAdd hdr = coalesce(`request_attribute.x-dynatrace-test`, `http.request.header.x-dynatrace-test`)\n| filter isNotNull(hdr) and contains(hdr, \"SI=k6\")\n| parse hdr, \"'VU=' INT:VU ';SI=' LD:SI ';LTN=' LD:LTN ';LSN=' LD:LSN ';TSN=' LD:TSN ';'\"\n| filter LTN == $Run and in(LSN, array($Script))\n| filter VU > 0\n| summarize VUs = countDistinct(VU), by:{time = bin(start_time, 30s)}\n| sort time asc",
+      "visualization": "lineChart"
+    },
+    "10": {
+      "type": "data",
+      "title": "Per step: the k6 summary, server side",
+      "query": "fetch spans\n| filter span.kind == \"server\"\n| fieldsAdd hdr = coalesce(`request_attribute.x-dynatrace-test`, `http.request.header.x-dynatrace-test`)\n| filter isNotNull(hdr) and contains(hdr, \"SI=k6\")\n| parse hdr, \"'VU=' INT:VU ';SI=' LD:SI ';LTN=' LD:LTN ';LSN=' LD:LSN ';TSN=' LD:TSN ';'\"\n| filter LTN == $Run and in(LSN, array($Script))\n| summarize Requests = count(), Failures = countIf((request.is_failed == true or http.response.status_code >= 400)),\n    avg = avg(duration), p50 = percentile(duration, 50), p95 = percentile(duration, 95),\n    p99 = percentile(duration, 99), max = max(duration), by:{TSN}\n| fieldsAdd `Failure %` = round(100.0 * Failures / Requests, decimals:2)\n| sort p95 desc",
+      "visualization": "table"
+    },
+    "11": {
+      "type": "data",
+      "title": "Status codes per step",
+      "query": "fetch spans\n| filter span.kind == \"server\"\n| fieldsAdd hdr = coalesce(`request_attribute.x-dynatrace-test`, `http.request.header.x-dynatrace-test`)\n| filter isNotNull(hdr) and contains(hdr, \"SI=k6\")\n| parse hdr, \"'VU=' INT:VU ';SI=' LD:SI ';LTN=' LD:LTN ';LSN=' LD:LSN ';TSN=' LD:TSN ';'\"\n| filter LTN == $Run and in(LSN, array($Script))\n| summarize Requests = count(), by:{TSN, http.request.method, http.response.status_code}\n| sort TSN asc, http.response.status_code asc",
+      "visualization": "table"
+    },
+    "12": {
+      "type": "data",
+      "title": "Services and endpoints hit by the test",
+      "query": "fetch spans\n| filter span.kind == \"server\"\n| fieldsAdd hdr = coalesce(`request_attribute.x-dynatrace-test`, `http.request.header.x-dynatrace-test`)\n| filter isNotNull(hdr) and contains(hdr, \"SI=k6\")\n| parse hdr, \"'VU=' INT:VU ';SI=' LD:SI ';LTN=' LD:LTN ';LSN=' LD:LSN ';TSN=' LD:TSN ';'\"\n| filter LTN == $Run and in(LSN, array($Script))\n| summarize Requests = count(), p95 = percentile(duration, 95), by:{Service = entityName(dt.entity.service), endpoint.name}\n| sort Requests desc",
+      "visualization": "table"
+    },
+    "13": {
+      "type": "data",
+      "title": "Where the time goes: downstream services in test traces",
+      "query": "fetch spans\n| filter span.kind == \"server\"\n| fieldsAdd hdr = coalesce(`request_attribute.x-dynatrace-test`, `http.request.header.x-dynatrace-test`)\n| filter isNotNull(hdr) and contains(hdr, \"SI=k6\")\n| parse hdr, \"'VU=' INT:VU ';SI=' LD:SI ';LTN=' LD:LTN ';LSN=' LD:LSN ';TSN=' LD:TSN ';'\"\n| filter LTN == $Run and in(LSN, array($Script))\n| fields trace.id\n| dedup trace.id\n| join [fetch spans | filter span.kind == \"server\" or span.kind == \"client\" or span.kind == \"internal\"], on:{trace.id}, fields:{dt.entity.service, span.kind, duration}\n| summarize Spans = count(), total = sum(duration), p95 = percentile(duration, 95), by:{Service = entityName(dt.entity.service), span.kind}\n| sort total desc",
+      "visualization": "table"
+    },
+    "14": {
+      "type": "data",
+      "title": "Slowest requests (open trace.id in Distributed Tracing)",
+      "query": "fetch spans\n| filter span.kind == \"server\"\n| fieldsAdd hdr = coalesce(`request_attribute.x-dynatrace-test`, `http.request.header.x-dynatrace-test`)\n| filter isNotNull(hdr) and contains(hdr, \"SI=k6\")\n| parse hdr, \"'VU=' INT:VU ';SI=' LD:SI ';LTN=' LD:LTN ';LSN=' LD:LSN ';TSN=' LD:TSN ';'\"\n| filter LTN == $Run and in(LSN, array($Script))\n| fields start_time, TSN, VU, duration, http.response.status_code, Service = entityName(dt.entity.service), trace.id\n| sort duration desc\n| limit 50",
+      "visualization": "table"
+    },
+    "15": {
+      "type": "data",
+      "title": "Run comparison: p95 per step across all runs in the timeframe",
+      "query": "fetch spans\n| filter span.kind == \"server\"\n| fieldsAdd hdr = coalesce(`request_attribute.x-dynatrace-test`, `http.request.header.x-dynatrace-test`)\n| filter isNotNull(hdr) and contains(hdr, \"SI=k6\")\n| parse hdr, \"'VU=' INT:VU ';SI=' LD:SI ';LTN=' LD:LTN ';LSN=' LD:LSN ';TSN=' LD:TSN ';'\"\n| filter in(LSN, array($Script))\n| summarize start = min(start_time), Requests = count(), p95 = percentile(duration, 95),\n    `Failure %` = round(100.0 * countIf((request.is_failed == true or http.response.status_code >= 400)) / count(), decimals:2), by:{TSN, LTN}\n| sort TSN asc, start asc",
+      "visualization": "table"
+    }
+  },
+  "layouts": {
+    "0": {
+      "x": 0,
+      "y": 0,
+      "w": 24,
+      "h": 3
+    },
+    "1": {
+      "x": 0,
+      "y": 3,
+      "w": 5,
+      "h": 3
+    },
+    "2": {
+      "x": 5,
+      "y": 3,
+      "w": 5,
+      "h": 3
+    },
+    "3": {
+      "x": 10,
+      "y": 3,
+      "w": 4,
+      "h": 3
+    },
+    "4": {
+      "x": 14,
+      "y": 3,
+      "w": 5,
+      "h": 3
+    },
+    "5": {
+      "x": 19,
+      "y": 3,
+      "w": 5,
+      "h": 3
+    },
+    "6": {
+      "x": 0,
+      "y": 6,
+      "w": 12,
+      "h": 6
+    },
+    "7": {
+      "x": 12,
+      "y": 6,
+      "w": 12,
+      "h": 6
+    },
+    "8": {
+      "x": 0,
+      "y": 12,
+      "w": 12,
+      "h": 6
+    },
+    "9": {
+      "x": 12,
+      "y": 12,
+      "w": 12,
+      "h": 6
+    },
+    "10": {
+      "x": 0,
+      "y": 18,
+      "w": 24,
+      "h": 6
+    },
+    "11": {
+      "x": 0,
+      "y": 24,
+      "w": 12,
+      "h": 6
+    },
+    "12": {
+      "x": 12,
+      "y": 24,
+      "w": 12,
+      "h": 6
+    },
+    "13": {
+      "x": 0,
+      "y": 30,
+      "w": 12,
+      "h": 6
+    },
+    "14": {
+      "x": 12,
+      "y": 30,
+      "w": 12,
+      "h": 6
+    },
+    "15": {
+      "x": 0,
+      "y": 36,
+      "w": 24,
+      "h": 7
+    }
+  },
+  "settings": {
+    "defaultTimeframe": {
+      "enabled": true,
+      "value": {
+        "from": "now()-2h",
+        "to": "now()"
+      }
+    }
+  }
+}

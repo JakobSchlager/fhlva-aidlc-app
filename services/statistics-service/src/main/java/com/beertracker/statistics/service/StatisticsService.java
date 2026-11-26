@@ -15,6 +15,8 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import jakarta.annotation.PostConstruct;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -53,6 +55,19 @@ public class StatisticsService {
     private final DailyTrendCacheRepository dailyTrendCacheRepository;
     private final StatisticsRefreshService refreshService;
     private final ObjectMapper objectMapper;
+
+    /**
+     * Feature flag FEATURE_LIVE_TREND (off by default): the trend is always current. Instead of the
+     * cache (refreshed by the scheduler), each day of the requested window is fetched live from the
+     * tracking service, one HTTP call per day: 30 calls for the default 30 days, up to 365.
+     */
+    @Value("${FEATURE_LIVE_TREND:false}")
+    private boolean liveTrend;
+
+    @PostConstruct
+    void logFeatureFlags() {
+        log.info("Feature LIVE_TREND {}", liveTrend ? "ON" : "off");
+    }
 
     // -------------------------------------------------------------------------
     // GET /statistics/me
@@ -114,11 +129,15 @@ public class StatisticsService {
         LocalDate today = LocalDate.now(ZoneOffset.UTC);
         LocalDate from = today.minusDays(days - 1L); // inclusive, so "last N days" = today - (N-1)
 
-        List<DailyTrendCache> cached = dailyTrendCacheRepository
-                .findByUserIdAndTrendDateBetween(userId, from, today);
-
-        Map<LocalDate, BigDecimal> byDate = cached.stream()
-                .collect(Collectors.toMap(DailyTrendCache::getTrendDate, DailyTrendCache::getStandardDrinks));
+        Map<LocalDate, BigDecimal> byDate;
+        if (liveTrend) {
+            byDate = refreshService.fetchLiveDailyDrinks(userId, from, today);
+        } else {
+            List<DailyTrendCache> cached = dailyTrendCacheRepository
+                    .findByUserIdAndTrendDateBetween(userId, from, today);
+            byDate = cached.stream()
+                    .collect(Collectors.toMap(DailyTrendCache::getTrendDate, DailyTrendCache::getStandardDrinks));
+        }
 
         // Build full series with zero-fill for missing days
         List<TrendDataPoint> data = new ArrayList<>(days);

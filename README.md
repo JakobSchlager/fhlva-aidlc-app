@@ -11,6 +11,7 @@ A microservices application for tracking beer consumption with health threshold 
 - [Scenario 2 — minikube](#scenario-2--minikube)
 - [Scenario 3 — Azure AKS](#scenario-3--azure-aks)
 - [Load testing](#load-testing)
+- [GitOps stages (Flux)](#gitops-stages-flux)
 - [Troubleshooting](#troubleshooting)
 
 ---
@@ -141,6 +142,8 @@ Runs the full stack on your laptop. nginx listens on `localhost:8080`.
    openssl genrsa -out secrets/auth-rs256-private-key.pem 2048
    ```
 
+   > **Do this before the first `compose up`.** If the file is missing, Podman (and Docker) create an empty *directory* at that path for the bind mount, and `auth-service` then crash-loops. See [RSA key path is a directory](#rsa-key-path-is-a-directory).
+
 2. Create your local environment file:
 
    ```bash
@@ -172,6 +175,9 @@ The frontend HTML should be returned. Individual service health endpoints are av
 |---|---|
 | `address already in use :8080` | Find the conflicting process: `lsof -i :8080`. Change the host port in `docker-compose.yml` if needed. |
 | `auth-service` exits at startup | Verify `secrets/auth-rs256-private-key.pem` exists and is readable. Re-run step 1. |
+| `auth-service` restart-loops with `java.io.IOException: Is a directory` in `KeyService` | The key path is an empty directory created by the bind mount. See [RSA key path is a directory](#rsa-key-path-is-a-directory). |
+| `postgres` exits with `superuser password is not specified` | `.env` is missing or `POSTGRES_PASSWORD` is empty. Re-run step 2, then `podman compose up -d`. |
+| Requests via nginx return `502` (e.g. k6 `setup: could not register/login … (status 502)`) | nginx is up but a backend is not. Run `podman ps -a` and check the logs of any exited or restarting service; usually one of the two rows above. |
 | `postgres` health check fails | First-time volume init can be slow. Run `podman compose logs postgres` and wait for `database system is ready`. |
 | Services fail with `Connection refused` to postgres | Ensure the `depends_on` health check is satisfied. Check that `POSTGRES_PASSWORD` in `.env` matches what postgres was initialised with. |
 
@@ -461,6 +467,78 @@ For minikube and AKS it runs as a Kubernetes Job or as a Helm test; see [`load/R
 
 ---
 
+## GitOps stages (Flux)
+
+Two stages, `staging` and `prod`, run as namespaces `beer-tracker-staging` and `beer-tracker-prod` in one cluster. [Flux](https://fluxcd.io/) inside the cluster pulls the desired state from this repository, so nothing outside the cluster needs access to its API server.
+
+One-time setup, with `kubectl` pointing at the cluster and your branch pushed:
+
+```bash
+./scripts/setup-gitops.sh                                # AKS (after az aks get-credentials)
+./scripts/setup-gitops.sh --build-minikube-images latest # minikube, builds the images first
+```
+
+The script creates both namespaces with their own PostgreSQL and secrets, installs Flux (pinned, no bootstrap, no Git token), and points it at the current branch of your `origin`.
+
+**Images on minikube.** There is no registry: a tag in `helmrelease.yaml` must exist inside minikube. Build a new version with
+
+```bash
+./scripts/build-images.sh v2 statistics-service          # one service; without a service name: all five
+```
+
+It builds with the devcontainer's Podman and loads the image into minikube (`minikube image load`). The devcontainer's image store is a volume that survives `minikube delete`, so rebuilds use the layer cache instead of downloading the Maven dependencies again. `setup-gitops.sh --build-minikube-images` uses the same script, and `scripts/preload-images.sh` loads Flux, PostgreSQL and k6 the same way: after a `minikube delete`, the setup downloads about 1 MB instead of 1.7 GB.
+
+From then on, a stage changes only through Git: edit `deploy/stages/<stage>/helmrelease.yaml` (image tags, values, `spec.test.enable`), commit and push, or merge a pull request. Flux checks every minute. Staging runs the k6 gate (`load/`) as a Helm test after every upgrade and rolls back automatically if it fails; prod has the gate off by default. Changes to the chart itself only roll out when `version` in `charts/beer-tracker/Chart.yaml` is raised (`reconcileStrategy: ChartVersion`).
+
+```bash
+kubectl get gitrepository,kustomizations -n flux-system   # what Flux pulled and applied
+kubectl get helmreleases -A                               # state of both stages
+kubectl get events -n beer-tracker-staging --field-selector involvedObject.kind=HelmRelease
+helm history beer-tracker -n beer-tracker-staging         # upgrades, failed tests, rollbacks
+kubectl port-forward -n beer-tracker-staging svc/beer-tracker-statistics-service 8084   # staging has no ingress; reach services directly
+```
+
+### Canary in prod
+
+Every service chart can run a second Deployment `<service>-canary` next to the stable one (off by default). Both share the `app` label, so the normal Service sends a share of the traffic to the canary, roughly `canary.replicas : replicaCount`; a second Service `<service>-canary` reaches only the canary pods. With a canary enabled, the k6 gate (if `spec.test.enable` is on) tests the canary Service. Pods carry `track: stable|canary` and `app.kubernetes.io/version: <tag>`.
+
+All of it is a change to `deploy/stages/prod/helmrelease.yaml`, e.g. for `statistics-service`:
+
+| Step | Change |
+|---|---|
+| Start | `canary.enabled: true`, `canary.tag: <new tag>` (optionally `canary.replicas`, `canary.env` for canary-only settings) |
+| Promote | `image.tag: <new tag>`, `canary.enabled: false` |
+| Abort | `canary.enabled: false`, or `git revert` the start commit |
+
+```bash
+kubectl get pods -n beer-tracker-prod -L track,app.kubernetes.io/version
+```
+
+### Feature flags (slow features)
+
+Each Java service has one feature behind a flag, **off by default**. Switched on, it works but costs latency, for the Lab 4 exercise "break your own SLO" ([`docs/lab-4-slow-features.md`](docs/lab-4-slow-features.md)). A flag is an environment variable: `env` in a stage's `helmrelease.yaml` for the stable track, `canary.env` for the canary only.
+
+| Service | Flag | Feature | Cost |
+|---|---|---|---|
+| `auth-service` | `FEATURE_STRONG_PASSWORD_HASH` | BCrypt cost 14 instead of 10 (`PASSWORD_HASH_STRENGTH`) | ~16× per register and login |
+| `beer-tracking-service` | `FEATURE_ENTRY_DAY_TOTALS` | standard drinks per entry and per day in the entry list | one query per listed entry |
+| `statistics-service` | `FEATURE_LIVE_TREND` | trend read live instead of from the cache | one call to `beer-tracking-service` per day |
+| `health-notification-service` | `FEATURE_LIVE_WARNINGS` | warnings evaluated on every list call instead of every 5 minutes | 7 calls to `beer-tracking-service` plus writes |
+
+```yaml
+    statistics-service:
+      image:
+        tag: v4
+      env:
+        FEATURE_LIVE_TREND: "true"
+```
+
+Each service logs its flags at startup (`Feature LIVE_TREND ON`).
+
+Group guide for the lab (host vs. container, which variant for how much RAM): [`docs/lab-4-student-guide.md`](docs/lab-4-student-guide.md).
+
+---
+
 ## Troubleshooting
 
 Cross-scenario issues that do not fit a single scenario.
@@ -480,6 +558,24 @@ openssl genrsa -out secrets/auth-rs256-private-key.pem 2048
 ```
 
 See `secrets/README.md` for full details on key management across scenarios.
+
+### RSA key path is a directory
+
+If `compose up` runs before the key is generated, the container engine creates `secrets/auth-rs256-private-key.pem` as an empty **directory** so it can satisfy the bind mount. Symptoms:
+
+- `ls -la secrets/` shows `auth-rs256-private-key.pem` with a leading `d`
+- `auth-service` restart-loops (`podman ps` shows `Up 1 second`, rising restart count), logging `Caused by: java.io.IOException: Is a directory` at `KeyService.loadPemBytes`
+- Anything that logs in through nginx gets `502`
+
+Fix: replace the directory with a real key, then **recreate** the container. A plain `restart` keeps the old directory mount and fails with `crun: move_mount … Invalid argument`.
+
+```bash
+rmdir secrets/auth-rs256-private-key.pem
+openssl genrsa -out secrets/auth-rs256-private-key.pem 2048
+podman compose up -d --force-recreate auth-service   # or docker compose …
+```
+
+A new key invalidates any JWTs issued with the old one, so users need to log in again.
 
 ### Services fail to start (health probe delays)
 

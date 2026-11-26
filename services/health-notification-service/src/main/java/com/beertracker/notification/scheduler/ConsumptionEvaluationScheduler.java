@@ -140,6 +140,39 @@ public class ConsumptionEvaluationScheduler {
         notificationService.evaluateUser(userId, dailyDrinks, weeklyDrinks);
     }
 
+    /**
+     * Live evaluation for one user, used by FEATURE_LIVE_WARNINGS on every warnings request.
+     * Fetches each of the last 7 days separately (7 calls to the tracking service instead of the
+     * scheduler's 2), so the per-day values could also be shown, and writes warnings on a read path.
+     */
+    public void evaluateUserLive(UUID userId) {
+        LocalDate today = LocalDate.now(ZoneOffset.UTC);
+        HttpHeaders headers = buildInternalHeaders();
+        double dailyDrinks = 0.0;
+        double weeklyDrinks = 0.0;
+        for (int back = 0; back < 7; back++) {
+            LocalDate day = today.minusDays(back);
+            String url = UriComponentsBuilder
+                    .fromHttpUrl(trackingBaseUrl + "/internal/tracking/summary")
+                    .queryParam("userId", userId)
+                    .queryParam("from", day)
+                    .queryParam("to", day)
+                    .toUriString();
+            try {
+                ResponseEntity<Map> resp = restTemplate.exchange(
+                        url, HttpMethod.GET, new HttpEntity<>(headers), Map.class);
+                double drinks = resp.getBody() != null ? toDouble(resp.getBody().get("totalStandardDrinks")) : 0.0;
+                if (back == 0) {
+                    dailyDrinks = drinks;
+                }
+                weeklyDrinks += drinks;
+            } catch (Exception e) {
+                log.warn("Live evaluation: could not fetch {} for user {}: {}", day, userId, e.getMessage());
+            }
+        }
+        notificationService.evaluateUser(userId, dailyDrinks, weeklyDrinks);
+    }
+
     private HttpHeaders buildInternalHeaders() {
         HttpHeaders headers = new HttpHeaders();
         if (internalApiKey != null && !internalApiKey.isBlank()) {

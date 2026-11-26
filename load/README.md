@@ -57,6 +57,7 @@ All profiles are capped at 200 iterations/s and 300 VUs. `baseline`, `spike`, `n
 | `SPIKE_FACTOR` | `5` | peak = `RATE × SPIKE_FACTOR` |
 | `USERS` | `20` | size of the user pool created in `setup()` (max 500) |
 | `WRITE_RATIO` | `0.3` | share of visits that log a beer |
+| `SEED_ENTRIES` | `1` | entries each user gets in setup, before the measured load (max 200); raise it to see costs that grow with a user's history |
 | `RUN_NAME` | `<profile>-<timestamp>` | load test name in the Dynatrace header |
 | `SLO_FILE` | `./slo.json` | threshold file |
 | `REQUEST_TIMEOUT` | `10s` | a slower request counts as failed |
@@ -134,6 +135,8 @@ x-dynatrace-test: VU=<vu>;SI=k6;LTN=<RUN_NAME>;LSN=beertracker-journey;TSN=<step
 ```
 
 (`LSN=beertracker-newcomer` for the `newcomers` profile). To filter by it, define request attributes that extract these values from the header in Dynatrace. Without that, the header is harmless.
+
+`dynatrace/load-test-dashboard.json` is a dashboard that parses the header with DQL (run, script, step, VU) and shows the k6 summary server-side: throughput, failure rate, p50/p95/p99 per step, status codes, downstream services, slowest traces, and a run comparison. It reads the header from the span field `http.request.header.x-dynatrace-test` (OneAgent records it on the AKS dev cluster without extra configuration) or, failing that, from a request attribute named `x-dynatrace-test` that captures the full header value. Import it with `dtctl create dashboard -f load/dynatrace/load-test-dashboard.json`, or upload it in the Dashboards app.
 
 ## What a run leaves behind
 

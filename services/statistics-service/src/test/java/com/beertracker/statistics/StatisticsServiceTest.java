@@ -29,6 +29,9 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
+import org.springframework.test.util.ReflectionTestUtils;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
@@ -340,5 +343,23 @@ class StatisticsServiceTest {
         double expectedStandardDrinks = (volumeMl * (abv / 100)) / 10;
 
         assertThat(expectedStandardDrinks).isEqualTo(2.5);
+    }
+
+    // --- Feature flag FEATURE_LIVE_TREND ---------------------------------------
+
+    @Test
+    @DisplayName("live trend: reads the tracking service per day instead of the cache")
+    void trend_liveTrendOn_bypassesCache() {
+        ReflectionTestUtils.setField(statisticsService, "liveTrend", true);
+        LocalDate today = LocalDate.now(ZoneOffset.UTC);
+        when(refreshService.fetchLiveDailyDrinks(eq(USER_ID), eq(today.minusDays(6)), eq(today)))
+                .thenReturn(java.util.Map.of(today, new BigDecimal("3.00")));
+        when(personalStatsCacheRepository.findByUserId(USER_ID)).thenReturn(Optional.empty());
+
+        TrendResponse response = statisticsService.getTrend(USER_ID, 7);
+
+        assertThat(response.data()).hasSize(7);
+        assertThat(response.data().get(6).standardDrinks()).isEqualByComparingTo("3.00");
+        verify(dailyTrendCacheRepository, never()).findByUserIdAndTrendDateBetween(any(), any(), any());
     }
 }
