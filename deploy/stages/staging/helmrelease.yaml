@@ -49,6 +49,8 @@ spec:
     beer-tracking-service:
       image:
         tag: v2
+      env:
+        FEATURE_ENTRY_DAY_TOTALS: "true"
     health-notification-service:
       image:
         tag: latest
