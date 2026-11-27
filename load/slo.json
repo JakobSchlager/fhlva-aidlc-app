@@ -5,8 +5,8 @@
     "statistics_me": { "p95": 150 },
     "statistics_trend": { "p95": 200 },
     "statistics_global": { "p95": 150 },
-    "tracking_list": { "p95": 200 },
+    "tracking_list": { "p95": 50 },
     "tracking_create": { "p95": 150 },
-    "notifications_list": { "p95": 50 }
+    "notifications_list": { "p95": 150 }
   }
 }
