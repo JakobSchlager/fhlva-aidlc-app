@@ -42,6 +42,8 @@ spec:
       enabled: false
     loadTest:
       enabled: true
+      env:
+        SEED_ENTRIES: "40"
     # --- Image tags: this is what a release changes ---
     auth-service:
       image:
