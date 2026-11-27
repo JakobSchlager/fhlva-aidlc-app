@@ -48,7 +48,9 @@ spec:
         tag: latest
     beer-tracking-service:
       image:
-        tag: latest
+        repository: ghcr.io/jakobschlager/beer-tracking-service
+        pullPolicy: IfNotPresent
+        tag: v4
       env:
         FEATURE_ENTRY_DAY_TOTALS: "true"
     health-notification-service:
