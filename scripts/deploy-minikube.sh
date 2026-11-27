@@ -3,10 +3,10 @@
 # deploy-minikube.sh — Deploy Beer Tracker to a local minikube cluster
 #
 # Usage:
-#   ./scripts/deploy-minikube.sh [--help]
+#   ./scripts/deploy-minikube.sh [--help] [--smoke-test]
 #
 # Prerequisites:
-#   - minikube running (minikube start)
+#   - minikube running or devcontainer-minikube-start available
 #   - kubectl configured for minikube
 #   - helm >= 3.10
 #   - .env file at repo root (copy from .env.example and fill values)
@@ -26,11 +26,15 @@ if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
   exit 0
 fi
 
-# --- Check minikube is running -----------------------------------------------
+# --- Check minikube is running (start if needed) ------------------------------
 echo "Checking minikube status..."
 if ! minikube status --format='{{.Host}}' 2>/dev/null | grep -q "Running"; then
-  echo "ERROR: minikube is not running. Start it with: minikube start" >&2
-  exit 1
+  echo "minikube is not running. Starting minikube..."
+  if command -v devcontainer-minikube-start &>/dev/null; then
+    devcontainer-minikube-start
+  else
+    minikube start
+  fi
 fi
 
 # --- Load .env ---------------------------------------------------------------
@@ -41,6 +45,18 @@ if [[ ! -f "$REPO_ROOT/.env" ]]; then
 fi
 # shellcheck disable=SC1091
 source "$REPO_ROOT/.env"
+
+# In devcontainers, VS Code may write a credsStore to ~/.docker/config.json that fails outside VS Code IPC,
+# causing Helm OCI registry fetches to fail with exit status 255.
+if [[ -z "${DOCKER_CONFIG:-}" ]] && grep -q "dev-containers-" "$HOME/.docker/config.json" 2>/dev/null; then
+  CREDS_STORE=$(grep -o '"credsStore": *"[^"]*"' "$HOME/.docker/config.json" | cut -d'"' -f4)
+  if ! echo "https://registry-1.docker.io/v2/" | "docker-credential-$CREDS_STORE" get &>/dev/null; then
+    DOCKER_CONFIG_FALLBACK="/tmp/docker-fallback"
+    mkdir -p "$DOCKER_CONFIG_FALLBACK"
+    echo '{}' > "$DOCKER_CONFIG_FALLBACK/config.json"
+    export DOCKER_CONFIG="$DOCKER_CONFIG_FALLBACK"
+  fi
+fi
 
 # Validate required variables
 : "${POSTGRES_PASSWORD:?ERROR: POSTGRES_PASSWORD is not set in .env}"
@@ -134,12 +150,18 @@ helm upgrade --install "$RELEASE" "$CHART" \
   -f "$REPO_ROOT/values-minikube.yaml" \
   --wait --timeout=10m
 
+# --- Smoke test (optional: --smoke-test or SMOKE_TEST=true) ------------------
+if [[ "${1:-}" == "--smoke-test" || "${SMOKE_TEST:-false}" == "true" ]]; then
+  echo ""
+  echo "Running smoke test..."
+  kubectl apply -k "$REPO_ROOT/load/" -n "$NAMESPACE"
+  kubectl delete job k6-load -n "$NAMESPACE" 2>/dev/null || true
+  kubectl apply -f "$REPO_ROOT/load/k8s/job.yaml" -n "$NAMESPACE"
+  kubectl wait --for=condition=complete job/k6-load -n "$NAMESPACE" --timeout=3m
+  kubectl logs job/k6-load -n "$NAMESPACE"
+fi
+
 echo ""
 echo "Deployment complete!"
 echo ""
 echo "Access the app at: http://$(minikube ip)"
-echo ""
-echo "Next step: initialise the database schema"
-echo "  kubectl run psql-init --rm -it --restart=Never --image=postgres:16 \\"
-echo "    --namespace=$NAMESPACE -- psql -h postgresql -U postgres \\"
-echo "    -f /dev/stdin < postgres-init/init.sql"
