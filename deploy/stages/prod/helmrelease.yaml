@@ -56,7 +56,7 @@ spec:
         tag: "v6"
         replicas: 1
         env:
-          FEATURE_ENTRY_DAY_TOTALS: "true"
+          FEATURE_ENTRY_DAY_TOTALS: "false"
     health-notification-service:
       image:
         tag: latest
