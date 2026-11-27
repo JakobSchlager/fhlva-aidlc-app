@@ -34,7 +34,7 @@ spec:
   # Runs the chart's Helm tests (the k6 gate) after every install/upgrade.
   # A failing test counts as a failed release and triggers the rollback above.
   test:
-    enable: false
+    enable: true
   values:
     namespace:
       create: false
@@ -48,7 +48,7 @@ spec:
         tag: latest
     beer-tracking-service:
       image:
-        tag: latest
+        tag: v2
     health-notification-service:
       image:
         tag: latest
