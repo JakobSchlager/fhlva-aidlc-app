@@ -48,7 +48,7 @@ spec:
         tag: latest
     beer-tracking-service:
       image:
-        tag: v2
+        tag: latest
     health-notification-service:
       image:
         tag: latest
