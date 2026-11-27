@@ -50,15 +50,15 @@ spec:
         tag: latest
     beer-tracking-service:
       image:
-        tag: v7
+        tag: v8
         env:
-          FEATURE_ENTRY_DAY_TOTALS: "true"
+          FEATURE_ENTRY_DAY_TOTALS: "false"
       canary:
         enabled: true
-        tag: "v7"
+        tag: "v8"
         replicas: 1
         env:
-          FEATURE_ENTRY_DAY_TOTALS: "true"
+          FEATURE_ENTRY_DAY_TOTALS: "false"
     health-notification-service:
       image:
         tag: latest
