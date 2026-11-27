@@ -54,7 +54,9 @@ spec:
         tag: latest
     statistics-service:
       image:
-        tag: latest
+        repository: ghcr.io/jakobschlager/statistics-service
+        pullPolicy: IfNotPresent
+        tag: v2
     frontend:
       image:
         tag: latest

@@ -69,4 +69,3 @@ It turned out that stale ip addresses were resolved. Curl manages to try both. T
 {"keys":[{"kty":"RSA","use":"sig","alg":"RS256","kid":"auth-service-key-1","n":"0eRlAtAHT26vmgef1EQMEX6m9g-MXjeX8r0vQGrGL-AXPufdb2Y1jTo2U3oVyOrI66kuokFJu0xUBpHG9wR9JfRZf5kZBXeXa3_rqH0GzSPxMUCNK-HWb210Psl9rXZPrhqNwMNo9NX6XuZGmNjgDjxM9DqAtrTBs2dJ0cYrUDn5ZobrVoY83bbYaxK1rzwPSK7v-IVjzrarZL4WgCyhC215gCw6A8OkqIiwS3m2wwUurX9r7hpdvKebFXw5-zQqsVa-OyJLDO6WG4CtZItM4N0i_XUiMxrcNT85eUdTY7oPuM4v2glwC0ERrXmCLQcPTAXFwMA8zHjWfGfVR8Srow","e":"AQAB"}]}/
 ```
 This was not resolved during the lab. It appears that the stale entry corresponds to the ip address of the last container (i.e. after rebuilding, one of the two entries refers to the previous container).
-

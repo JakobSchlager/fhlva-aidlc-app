@@ -2,6 +2,7 @@ version: "3.9"
 
 networks:
   beer-tracker-network:
+    name: fhlva-aidlc-app-beer-tracker-network-clean
     driver: bridge
 
 services:
