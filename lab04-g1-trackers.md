@@ -18,3 +18,8 @@ server closed the connection unexpectedly
 connection to server was lost
 command terminated with exit code 2
 ```
+
+Maven blocks FH IP
+Your ip has exceeded rate limits. Find out more here https://central.sonatype.org/faq/429-error/
+
+The SLO is too loose -> Needed to decrease p95 from 200 to 20 (or p99 < 100)
