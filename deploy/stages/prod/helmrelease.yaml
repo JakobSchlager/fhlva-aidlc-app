@@ -53,7 +53,7 @@ spec:
         tag: v6
       canary:
         enabled: true
-        tag: "v6"
+        tag: "v5"
         replicas: 1
         env:
           FEATURE_ENTRY_DAY_TOTALS: "false"
