@@ -51,9 +51,10 @@ spec:
         tag: latest
       canary:
         enabled: true
-        tag: "v2"
+        tag: "v3"
         replicas: 1
-        env: {}
+        env:
+          SPRING_DATASOURCE_PASSWORD: "wrongpassword"
     health-notification-service:
       image:
         tag: latest
