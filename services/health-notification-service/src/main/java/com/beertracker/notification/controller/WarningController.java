@@ -3,7 +3,12 @@ package com.beertracker.notification.controller;
 import com.beertracker.notification.dto.PagedResponse;
 import com.beertracker.notification.dto.WarningResponse;
 import com.beertracker.notification.entity.Warning.WarningStatus;
+import com.beertracker.notification.scheduler.ConsumptionEvaluationScheduler;
 import com.beertracker.notification.service.NotificationService;
+import jakarta.annotation.PostConstruct;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
@@ -23,10 +28,29 @@ import java.util.UUID;
 @RequestMapping("/notifications/warnings")
 public class WarningController {
 
-    private final NotificationService notificationService;
+    private static final Logger log = LoggerFactory.getLogger(WarningController.class);
 
-    public WarningController(NotificationService notificationService) {
+    private final NotificationService notificationService;
+    private final ConsumptionEvaluationScheduler evaluator;
+
+    /**
+     * Feature flag FEATURE_LIVE_WARNINGS (off by default): warnings are always current. Without it,
+     * a new warning appears only after the next scheduler run (every 5 minutes). With it, every
+     * GET /notifications/warnings first evaluates the user live (7 calls to the tracking service
+     * plus database writes) and then lists the warnings.
+     */
+    @Value("${FEATURE_LIVE_WARNINGS:false}")
+    private boolean liveWarnings;
+
+    public WarningController(NotificationService notificationService,
+                             ConsumptionEvaluationScheduler evaluator) {
         this.notificationService = notificationService;
+        this.evaluator = evaluator;
+    }
+
+    @PostConstruct
+    void logFeatureFlags() {
+        log.info("Feature LIVE_WARNINGS {}", liveWarnings ? "ON" : "off");
     }
 
     /**
@@ -41,6 +65,9 @@ public class WarningController {
             @RequestParam(defaultValue = "20") int size) {
 
         UUID userId = extractUserId(jwt);
+        if (liveWarnings) {
+            evaluator.evaluateUserLive(userId);
+        }
         Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "triggeredAt"));
         PagedResponse<WarningResponse> response = notificationService.getWarnings(userId, status, pageable);
         return ResponseEntity.ok(response);

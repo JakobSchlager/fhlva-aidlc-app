@@ -20,6 +20,9 @@ const URLS = {
 };
 const USERS = Math.min(Number(__ENV.USERS || 20), 500);
 const WRITE_RATIO = Number(__ENV.WRITE_RATIO || 0.3);
+// Entries each user gets in setup (history before the measured load). 1 = just enough for warm
+// statistics. Real users have hundreds; raise it to see costs that grow with a user's data.
+const SEED_ENTRIES = Math.min(Math.max(Number(__ENV.SEED_ENTRIES || 1), 1), 200);
 const PASSWORD = 'load-test-password';
 // A request slower than this counts as failed, so a hanging dependency shows up as an
 // error-rate violation instead of a stuck run.
@@ -123,7 +126,7 @@ export function setup() {
     }
     // One entry and one statistics call per user, so the measured load starts
     // with warm statistics caches instead of the first-access refresh path.
-    createEntry(token, 'setup_create', setupTag);
+    for (let e = 0; e < SEED_ENTRIES; e++) createEntry(token, 'setup_create', setupTag);
     http.get(`${URLS.statistics}/statistics/me`, params('setup_statistics', token, setupTag));
     users.push({ email, token, exp: expiry(token) });
   }
@@ -184,6 +187,8 @@ export function visit(data) {
     if (res.status === 401) session.renewAt = 0; // token rejected: renew next time
   }
 
+  // smoke only: it uses constant VUs, so this paces each VU to about one visit per second
+  // the other profiles get their pacing from the executor, not from think time
   if (PROFILE === 'smoke') sleep(1);
 }
 

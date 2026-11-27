@@ -3,7 +3,14 @@ global:
     registry: ""
     tag: "latest"
 
+# Renders the "beer-tracker" Namespace. Set to false when the release lives in another,
+# pre-created namespace (for example the GitOps stages beer-tracker-staging / beer-tracker-prod).
+namespace:
+  create: true
+
 ingress:
+  # Set to false for releases that should not take the cluster's ingress paths (e.g. a staging stage).
+  enabled: true
   class: "azure/application-gateway"
   tls:
     enabled: true
@@ -90,6 +97,7 @@ frontend:
 loadTest:
   enabled: false
   image: docker.io/grafana/k6:2.3.0
-  # Environment for the gate pod, e.g. RATE, DURATION, or STATISTICS_URL to target a canary Service.
+  # Environment for the gate pod, e.g. RATE or DURATION. Services with canary.enabled are
+  # tested through their <service>-canary Service automatically.
   # Keys set here override the template's defaults (PROFILE=gate and the release's service URLs).
   env: {}

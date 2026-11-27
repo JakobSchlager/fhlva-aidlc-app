@@ -22,6 +22,7 @@ public class SecurityConfig {
             .authorizeHttpRequests(auth -> auth
                     .requestMatchers("/actuator/health/**").permitAll()
                     .requestMatchers("/actuator/info").permitAll()
+                    .requestMatchers("/actuator/prometheus").permitAll()
                     .anyRequest().authenticated()
             )
             .oauth2ResourceServer(oauth2 ->

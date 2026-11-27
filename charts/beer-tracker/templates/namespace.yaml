@@ -1,6 +1,8 @@
+{{- if .Values.namespace.create }}
 apiVersion: v1
 kind: Namespace
 metadata:
   name: beer-tracker
   labels:
     app.kubernetes.io/managed-by: Helm
+{{- end }}

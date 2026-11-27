@@ -1,36 +1,61 @@
+{{- /*
+Stable track, plus a canary track when canary.enabled is true (Lab 4). Both tracks share the
+`app` label, so the Service routes to both; the traffic share follows the replica ratio.
+The stable selector stays `app` only: selectors are immutable, and adding `track` to it would
+break upgrades of existing releases. The canary's pods match it too, but each ReplicaSet only
+manages pods it owns (ownerReferences), so the two Deployments do not interfere.
+*/}}
+{{- $tracks := list (dict "name" "stable" "suffix" "" "tag" .Values.image.tag "replicas" .Values.replicaCount "env" .Values.env) }}
+{{- if .Values.canary.enabled }}
+{{- $tracks = append $tracks (dict "name" "canary" "suffix" "-canary" "tag" (required "canary.tag is required when canary.enabled is true" .Values.canary.tag) "replicas" .Values.canary.replicas "env" (merge (deepCopy (.Values.canary.env | default dict)) (.Values.env | default dict))) }}
+{{- end }}
+{{- range $tracks }}
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ printf "%s-%s" .Release.Name .Chart.Name }}
-  namespace: {{ .Release.Namespace }}
+  name: {{ printf "%s-%s%s" $.Release.Name $.Chart.Name .suffix }}
+  namespace: {{ $.Release.Namespace }}
   labels:
-    app: {{ .Chart.Name }}
+    app: {{ $.Chart.Name }}
+    track: {{ .name }}
 spec:
-  replicas: {{ .Values.replicaCount }}
+  replicas: {{ .replicas }}
+  {{- with $.Values.strategy }}
+  strategy:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
   selector:
     matchLabels:
-      app: {{ .Chart.Name }}
+      app: {{ $.Chart.Name }}
+      {{- if eq .name "canary" }}
+      track: canary
+      {{- end }}
   template:
     metadata:
       labels:
-        app: {{ .Chart.Name }}
+        app: {{ $.Chart.Name }}
+        track: {{ .name }}
+        # Read by Dynatrace build label propagation (DT_RELEASE_VERSION / DT_RELEASE_PRODUCT).
+        app.kubernetes.io/version: {{ .tag | quote }}
+        app.kubernetes.io/part-of: beer-tracker
     spec:
-      serviceAccountName: {{ .Values.serviceAccount.name }}
+      serviceAccountName: {{ $.Values.serviceAccount.name }}
       containers:
-        - name: {{ .Chart.Name }}
-          image: {{ printf "%s:%s" .Values.image.repository .Values.image.tag }}
-          imagePullPolicy: {{ .Values.image.pullPolicy }}
+        - name: {{ $.Chart.Name }}
+          image: {{ printf "%s:%s" $.Values.image.repository .tag }}
+          imagePullPolicy: {{ $.Values.image.pullPolicy }}
           ports:
-            - containerPort: {{ .Values.service.port }}
+            - containerPort: {{ $.Values.service.port }}
               protocol: TCP
           envFrom:
             - configMapRef:
-                name: {{ printf "%s-%s-config" .Release.Name .Chart.Name }}
+                name: {{ printf "%s-%s-config" $.Release.Name $.Chart.Name }}
             - secretRef:
                 name: beer-tracker-secrets
-          {{- if .Values.env }}
+          {{- if .env }}
           env:
-            {{- range $key, $value := .Values.env }}
+            {{- range $key, $value := .env }}
             - name: {{ $key }}
               value: {{ $value | quote }}
             {{- end }}
@@ -40,25 +65,26 @@ spec:
           startupProbe:
             httpGet:
               path: /actuator/health/liveness
-              port: {{ .Values.service.port }}
+              port: {{ $.Values.service.port }}
             periodSeconds: 10
             failureThreshold: 30
           livenessProbe:
             httpGet:
               path: /actuator/health/liveness
-              port: {{ .Values.service.port }}
+              port: {{ $.Values.service.port }}
             periodSeconds: 10
             failureThreshold: 3
           readinessProbe:
             httpGet:
               path: /actuator/health/readiness
-              port: {{ .Values.service.port }}
+              port: {{ $.Values.service.port }}
             periodSeconds: 10
             failureThreshold: 3
           resources:
             requests:
-              cpu: {{ .Values.resources.requests.cpu }}
-              memory: {{ .Values.resources.requests.memory }}
+              cpu: {{ $.Values.resources.requests.cpu }}
+              memory: {{ $.Values.resources.requests.memory }}
             limits:
-              cpu: {{ .Values.resources.limits.cpu }}
-              memory: {{ .Values.resources.limits.memory }}
+              cpu: {{ $.Values.resources.limits.cpu }}
+              memory: {{ $.Values.resources.limits.memory }}
+{{- end }}

@@ -25,4 +25,15 @@ autoscaling:
 serviceAccount:
   name: statistics-service
 
+# Deployment update strategy, e.g. maxSurge: 0 on small clusters (values-minikube.yaml). Empty = Kubernetes default.
+strategy: {}
+
 env: {}
+
+# Canary track (Lab 4): a second Deployment next to the stable one. Off by default.
+canary:
+  enabled: false
+  tag: ""
+  replicas: 1
+  # Environment overrides for the canary only, merged over env.
+  env: {}
