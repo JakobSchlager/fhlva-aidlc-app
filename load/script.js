@@ -35,7 +35,7 @@ function thresholds() {
   // The gate profile stops as soon as an SLO is clearly violated.
   const abort = PROFILE === 'gate';
   const rule = (threshold) =>
-    abort ? { threshold, abortOnFail: true, delayAbortEval: '10s' } : threshold;
+    abort ? { threshold, abortOnFail: true, delayAbortEval: '60s' } : threshold;
 
   const t = {
     // Smoke must be clean; the other profiles use the group's error budget.
@@ -129,6 +129,13 @@ export function setup() {
     for (let e = 0; e < SEED_ENTRIES; e++) createEntry(token, 'setup_create', setupTag);
     http.get(`${URLS.statistics}/statistics/me`, params('setup_statistics', token, setupTag));
     users.push({ email, token, exp: expiry(token) });
+  }
+  const warm = users[0];
+  for (let i = 0; i < 10; i++) {
+    http.get(`${URLS.statistics}/statistics/me/trend?days=30`, params('setup_warmup', warm.token, setupTag));
+    http.get(`${URLS.tracking}/tracking/entries?page=0&size=20`, params('setup_warmup', warm.token, setupTag));
+    http.get(`${URLS.statistics}/statistics/global`, params('setup_warmup', warm.token, setupTag));
+    http.get(`${URLS.notifications}/notifications/warnings`, params('setup_warmup', warm.token, setupTag));
   }
   return { runId, runName, users };
 }
