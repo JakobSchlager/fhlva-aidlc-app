@@ -7,6 +7,6 @@
     "statistics_global": { "p95": 150 },
     "tracking_list": { "p95": 200 },
     "tracking_create": { "p95": 150 },
-    "notifications_list": { "p95": 150 }
+    "notifications_list": { "p95": 50 }
   }
 }
