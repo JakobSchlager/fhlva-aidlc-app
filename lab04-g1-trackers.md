@@ -25,3 +25,8 @@ Your ip has exceeded rate limits. Find out more here https://central.sonatype.or
 The SLO is too loose -> Needed to decrease p95 from 200 to 20 (or p99 < 100)
 
 Achieved rollback with new SLOs
+
+Increase SEED_ENTRIES: "40" -> p95 90 => > 50 -> failes
+
+Code change would be moving the db request from mapping outwards -> Request once, add returned value to each element
+

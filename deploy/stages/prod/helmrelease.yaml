@@ -42,18 +42,21 @@ spec:
       enabled: true
     loadTest:
       enabled: true
+      env:
+        SEED_ENTRIES: "40"
     # --- Image tags: this is what a release changes ---
     auth-service:
       image:
         tag: latest
     beer-tracking-service:
       image:
-        tag: latest
+        tag: v6
       canary:
         enabled: true
-        tag: "v2"
+        tag: "v6"
         replicas: 1
-        env: {}
+        env:
+          FEATURE_ENTRY_DAY_TOTALS: "true"
     health-notification-service:
       image:
         tag: latest
