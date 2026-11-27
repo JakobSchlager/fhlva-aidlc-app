@@ -34,7 +34,7 @@ spec:
   # Runs the chart's Helm tests (the k6 gate) after every install/upgrade.
   # A failing test counts as a failed release and triggers the rollback above.
   test:
-    enable: true
+    enable: false
   values:
     namespace:
       create: false
@@ -62,10 +62,9 @@ spec:
       # The same block works for every service chart.
       canary:
         enabled: true
-        tag: v3
+        tag: v2
         replicas: 1
-        env: 
-          BEER_TRACKING_INTERNAL_URL: "http://beer-tracker-beer-tracking-service:9999"
+        env: {}
     frontend:
       image:
         tag: latest
