@@ -50,10 +50,10 @@ spec:
         tag: latest
     beer-tracking-service:
       image:
-        tag: v6
+        tag: v7
       canary:
         enabled: true
-        tag: "v5"
+        tag: "v7"
         replicas: 1
         env:
           FEATURE_ENTRY_DAY_TOTALS: "false"
